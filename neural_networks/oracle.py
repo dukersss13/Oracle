@@ -28,12 +28,12 @@ class Oracle:
         x_train, y_train = player_game_logs[holdout:, :-1], player_game_logs[holdout:, -1]
 
         return x_train, y_train
-
+        
     def get_players_forecast(self, filtered_players_logs) -> int:
         """
         """
         holdout = 1
-        last_x_games = 5
+        last_x_games = 8
 
         x_train, y_train = self.prepare_training_data(filtered_players_logs, holdout=holdout)
         x_test, actual_points = self.get_testing_data(filtered_players_logs, holdout=holdout, last_x_games=last_x_games)

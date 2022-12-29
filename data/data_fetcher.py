@@ -1,3 +1,6 @@
+import os
+
+import json
 import pandas as pd
 import numpy as np
 from enum import Enum
@@ -5,6 +8,7 @@ from enum import Enum
 from nba_api.stats.endpoints import playergamelog, leagueseasonmatchups, commonteamroster, teamgamelogs
 from nba_api.stats.library.parameters import SeasonAll
 from nba_api.stats.static import teams, players
+import tensorflow as tf
 from dataclasses import dataclass
 
 
@@ -18,8 +22,7 @@ class TeamData:
     team_name: str = None
     team_game_logs: pd.DataFrame = None
     team_roster: np.ndarray = None
-    individual_players_game_logs: dict = None
-    game_forecast: pd.DataFrame = None
+    active_players: list = []
 
 
 class DataFetcher:
@@ -29,29 +32,42 @@ class DataFetcher:
         self.season = season
         self.predictors = nn_config["predictors"]
         self.num_seasons = nn_config["num_seasons"]
+
+        self.target_path = f"{os.getcwd()}/artifacts/active_players.json"
+
         self.fetch_teams_data()
 
     @staticmethod
-    def fetch_teams_dict(team_name: str):
+    def fetch_team_dict(team_name: str) -> dict:
         """
+        Fetch the dictionary data for given team. The dictionary contains team_id, team nick name, etc...
+        :param team_name: name of NBA team
 
-        :param team_name:
-        :return:
+        :return: team_data: data of the team
         """
         nba_teams = teams.get_teams()
-        team_data = [team for team in nba_teams if team["nickname"] == team_name][0]
+        team_dict = [team for team in nba_teams if team["nickname"] == team_name][0]
 
-        return team_data
+        return team_dict
 
     @staticmethod
-    def make_dict(keys, values):
-        return {key: value for key, value in zip(keys, values)}
+    def init_months_dict() -> dict:
+        """
+        Create months dictionary.
+        """
+        months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
+        months_dict = dict(zip(months, range(1, len(months)+1)))
 
-    def fetch_rosters(self, team_name: str):
+        return months_dict
+
+    def fetch_roster(self, team_name: str) -> np.ndarray:
         """
-        :return:
+        Fetch the roster of given team.
+
+        :param team_name: name of NBA team.
+        :return: array of team roster
         """
-        team_dict = DataFetcher.fetch_teams_dict(team_name.capitalize())
+        team_dict = DataFetcher.fetch_team_dict(team_name.capitalize())
         team_roster = commonteamroster.CommonTeamRoster(team_id=team_dict["id"],
                                                         season=self.season).get_data_frames()[0]["PLAYER"].values
         
@@ -59,6 +75,7 @@ class DataFetcher:
     
     def fetch_teams_data(self):
         """
+        Fetch the data needed for each team & create/update active players json.
         """
         self.home_team_data = TeamData()
         self.away_team_data = TeamData()
@@ -66,22 +83,26 @@ class DataFetcher:
         self.home_team_data.team_name = self.home_team
         self.away_team_data.team_name = self.away_team
 
-        self.home_team_data.team_roster = self.fetch_rosters(self.home_team)
-        self.away_team_data.team_roster = self.fetch_rosters(self.away_team)
+        self.home_team_data.team_roster = self.fetch_roster(self.home_team)
+        self.away_team_data.team_roster = self.fetch_roster(self.away_team)
+
+        self.home_away_dict = {self.home_team: Team.HOME, self.away_team: Team.AWAY}
+
+        self.update_active_players_json()
 
     def fetch_players_game_logs_df(self, players_id: str) -> pd.DataFrame:
         """
-        :param players_full_name:
-        :param last_games:
-        :return:
-        """
-        last_games = 82 * self.num_seasons
+        Access the PlayerGameLog module to fetch the game logs df of given player.
 
+        :param players_id: player ID.
+        :return: the given player's game logs in df format.
+        """
+        last_games = int(82 * self.num_seasons)
         players_game_log = playergamelog.PlayerGameLog(player_id=players_id, season=SeasonAll.all,
                                                        season_type_all_star="Regular Season")
         players_game_logs_df = players_game_log.get_data_frames()[0]
         try:
-            players_game_logs_df =  players_game_logs_df.iloc[:last_games, :]
+            players_game_logs_df =  players_game_logs_df.iloc[:last_games+1, :]
         except:
             players_game_logs_df = players_game_logs_df
 
@@ -89,6 +110,10 @@ class DataFetcher:
 
     def get_filtered_players_logs(self, players_full_name: str) -> np.ndarray:
         """
+        Retrieve the filtered game logs for given player.
+
+        :param players_full_name: full name of the player.
+        :return filtered_log.values: an array of player's game logs filtered by specific columns.
         """
         players_id = self.fetch_players_id(players_full_name)
 
@@ -97,14 +122,99 @@ class DataFetcher:
             return None
 
         players_game_logs_df = self.fetch_players_game_logs_df(players_id)
-        filtered_log = DataFetcher.filter_stats(players_game_logs_df, self.predictors)
+        players_game_logs_with_rest_df = DataFetcher.add_rest_days(players_game_logs_df)
+        complete_players_game_logs = DataFetcher.add_home_away_columns(players_game_logs_with_rest_df)
+        filtered_log = DataFetcher.filter_stats(complete_players_game_logs, self.predictors)
 
         return filtered_log.values
+
+    def set_active_players(self):
+        """
+        """
+        with open(self.target_path) as f:
+            active_players_json = json.load(f)
+        
+        for team in active_players_json:
+            team_data = self.home_team_data if self.home_away_dict[team] == Team.HOME else self.away_team_data
+            for player
+
+    def update_active_players_json(self):
+        """
+        Update the active players json to set active players or manually assign minutes.
+        """
+        # Check if the json file exists in the first place
+        # If not, create one
+        self.check_active_players_json_exists()
+
+        with open(self.target_path) as f:
+            active_players_json = json.load(f)
+        
+        for team_name in active_players_json:
+            del team_name
+        
+        active_players_json = self.init_active_players_json()
+        with open(self.target_path, 'w') as f:
+            json.dump(active_players_json, f, indent=1)
+
+    def check_active_players_json_exists(self):
+        """
+        Check if active players json exists. If not, create one.
+        """
+        if not os.path.exists(self.target_path):
+            active_players_json = self.init_active_players_json()
+            with open(self.target_path, 'w') as f:
+                json.dumps(active_players_json, f, indent=1)
+
+    def init_active_players_json(self):
+        """
+        """
+        home_roster = self.home_team_data.team_roster
+        away_roster = self.away_team_data.team_roster
+
+        json =  {self.home_team: dict(zip(home_roster, [None for _ in range(len(home_roster))])),
+                    self.away_team:dict(zip(away_roster, [None for _ in range(len(away_roster))]))}
+        
+        return json
+
+    @staticmethod
+    def add_rest_days(players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        """
+        players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(lambda x: x.split(" "))
+        players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(DataFetcher.convert_to_timestamp)
+        players_game_logs_df["REST_DAYS"] = players_game_logs_df["GAME_DATE"].diff(periods=-1)
+        players_game_logs_df = players_game_logs_df.iloc[:-1, :]
+        players_game_logs_df["REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
+
+        return players_game_logs_df
+
+    @staticmethod
+    def add_home_away_columns(players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        """
+        players_game_logs_df[["HOME", 
+                              "AWAY"]] = tf.one_hot(players_game_logs_df["MATCHUP"].apply(DataFetcher.detect_home_or_away_games), 2)
+
+        return players_game_logs_df
+
+    @staticmethod
+    def detect_home_or_away_games(value):
+        """
+        """
+        return 1 if "@" in value else 0
+
+    @staticmethod
+    def convert_to_timestamp(value):
+        """
+        """
+        months_dict = DataFetcher.init_months_dict()
+        value = pd.Timestamp(f"{value[2]}-{months_dict[value[0]]}-{value[1][:-1]}")
+
+        return value
 
     @staticmethod
     def filter_stats(game_logs_df: pd.DataFrame, columns_wanted: list) -> pd.DataFrame:
         """
-
         :param game_logs_df:
         :param columns_wanted:
         :return:
@@ -146,7 +256,7 @@ class DataFetcher:
     def fetch_team_game_logs(self, team_name: str):
         """
         """
-        team_dict = DataFetcher.fetch_teams_dict(team_name.capitalize())
+        team_dict = DataFetcher.fetch_team_dict(team_name.capitalize())
         team_game_logs = teamgamelogs.TeamGameLogs(team_id_nullable=team_dict["id"],
                                                    season_nullable=self.season).get_data_frames()[0]
 
