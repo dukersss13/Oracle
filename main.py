@@ -7,10 +7,10 @@ if __name__ == '__main__':
                   "REST_DAYS", "HOME", "AWAY", "PTS"]
 
     game_details = {"home_team": "Pelicans", "away_team": "76ers", "game_date": "12-30-2022"}
-    oracle_config = {"holdout": 1, "last_x_games": 5, 
-                     "save_file": True, "output_path": "output"}
+    oracle_config = {"save_file": True, "output_path": "output"}
 
-    nn_config = {"predictors": predictors, "num_seasons": 1.5, "input_shape": len(predictors)-1, "output_shape": 1,
+    nn_config = {"predictors": predictors, "num_seasons": 1.5, "holdout": 1, "last_x_games": 5,
+                 "input_shape": len(predictors)-1, "output_shape": 1,
                  "activation_func": "relu", "learning_rate": 1e-5, "output_activation_func": "relu",
                  "loss_function": "MSE", "optimizer_function": "SGD", "metrics": "mean_squared_error", "epochs": 1}
     

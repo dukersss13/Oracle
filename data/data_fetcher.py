@@ -1,5 +1,6 @@
 import os
 
+from typing import Tuple
 import json
 import pandas as pd
 import numpy as np
@@ -11,6 +12,7 @@ from nba_api.stats.static import teams, players
 import tensorflow as tf
 from dataclasses import dataclass
 
+pd.set_option('mode.chained_assignment', None)
 
 class Team(Enum):
     HOME = 0
@@ -30,6 +32,7 @@ class DataFetcher:
         self.home_team = home_team
         self.away_team = away_team
         self.season = season
+        self.nn_config = nn_config
         self.predictors = nn_config["predictors"]
         self.num_seasons = nn_config["num_seasons"]
 
@@ -112,7 +115,7 @@ class DataFetcher:
 
         return players_game_logs_df
 
-    def get_filtered_players_logs(self, players_full_name: str) -> np.ndarray:
+    def get_filtered_players_logs(self, players_full_name: str) -> Tuple[np.ndarray, pd.Timestamp]:
         """
         Retrieve the filtered game logs for given player.
 
@@ -123,14 +126,26 @@ class DataFetcher:
 
         if players_id is None:
             print(f"WARNING: Cannot retrieve logs for {players_full_name}")
-            return None
+            return None, None
 
         players_game_logs_df = self.fetch_players_game_logs_df(players_id)
         players_game_logs_with_rest_df = DataFetcher.add_rest_days(players_game_logs_df)
+        most_recent_game_date = self.get_most_recent_game_date(players_game_logs_df)
         complete_players_game_logs = DataFetcher.add_home_away_columns(players_game_logs_with_rest_df)
         filtered_log = DataFetcher.filter_stats(complete_players_game_logs, self.predictors)
 
-        return filtered_log.values
+        return filtered_log.values, most_recent_game_date
+
+    def get_most_recent_game_date(self, players_game_logs_df: pd.DataFrame) -> pd.Timestamp:
+        """_summary_
+
+        :param players_game_logs_df: _description_
+        :return: _description_
+        """
+        if self.nn_config["holdout"] in [0, 1]:
+            return players_game_logs_df["GAME_DATE"].values[self.nn_config["holdout"]]
+        else:
+            raise ValueError("Oracle currently can only handle at most 1 holdout game!")
 
     def set_active_players(self):
         """
@@ -188,9 +203,9 @@ class DataFetcher:
         """
         players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(lambda x: x.split(" "))
         players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(DataFetcher.convert_to_timestamp)
-        players_game_logs_df["REST_DAYS"] = players_game_logs_df["GAME_DATE"].diff(periods=-1) - 1
+        players_game_logs_df["REST_DAYS"] = players_game_logs_df["GAME_DATE"].diff(periods=-1) - pd.Timedelta(1, "days")
         players_game_logs_df = players_game_logs_df.iloc[:-1, :]
-        players_game_logs_df["REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
+        players_game_logs_df.loc[:, "REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
 
         return players_game_logs_df
 
