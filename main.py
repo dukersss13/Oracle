@@ -1,4 +1,4 @@
-from neural_networks.oracle import Oracle, Team
+from neural_networks.oracle import Oracle
 
 
 if __name__ == '__main__':
@@ -6,13 +6,13 @@ if __name__ == '__main__':
                   "AST", "TOV", "PF",
                   "REST_DAYS", "HOME", "AWAY", "PTS"]
 
-    nn_config = {"predictors": predictors,  "num_seasons": 1, "input_shape": len(predictors)-1, "output_shape": 1,
-                 "activation_func": "relu", "learning_rate": 1e-5, "output_activation_func": "relu",
-                 "loss_function": "MSE", "optimizer_function": "SGD", "metrics": "mean_squared_error", "epochs": 300}
-    
-    oracle = Oracle("Nets", "Grizzlies", nn_config)
-    home_team_forecast_df = oracle.get_team_forecast(Team.HOME)
-    away_team_forecast_df = oracle.get_team_forecast(Team.AWAY)
+    game_details = {"home_team": "Pelicans", "away_team": "76ers", "game_date": "12-30-2022"}
+    oracle_config = {"holdout": 1, "last_x_games": 5, 
+                     "save_file": True, "output_path": "output"}
 
-    # Populate Rosters - assign minutes: int, None, DNP.
-    # If DNP - remove player from active players.
+    nn_config = {"predictors": predictors, "num_seasons": 1.5, "input_shape": len(predictors)-1, "output_shape": 1,
+                 "activation_func": "relu", "learning_rate": 1e-5, "output_activation_func": "relu",
+                 "loss_function": "MSE", "optimizer_function": "SGD", "metrics": "mean_squared_error", "epochs": 1}
+    
+    oracle = Oracle(game_details=game_details, oracle_config=oracle_config, nn_config=nn_config)
+    oracle.run()

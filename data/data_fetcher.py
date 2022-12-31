@@ -22,7 +22,7 @@ class TeamData:
     team_name: str = None
     team_game_logs: pd.DataFrame = None
     team_roster: np.ndarray = None
-    active_players: list = []
+    active_players: np.ndarray = None
 
 
 class DataFetcher:
@@ -34,7 +34,6 @@ class DataFetcher:
         self.num_seasons = nn_config["num_seasons"]
 
         self.target_path = f"{os.getcwd()}/artifacts/active_players.json"
-
         self.fetch_teams_data()
 
     @staticmethod
@@ -67,7 +66,12 @@ class DataFetcher:
         :param team_name: name of NBA team.
         :return: array of team roster
         """
-        team_dict = DataFetcher.fetch_team_dict(team_name.capitalize())
+        if " " in team_name:
+            team_name = team_name.title()
+        else:
+            team_name = team_name.capitalize()
+
+        team_dict = DataFetcher.fetch_team_dict(team_name)
         team_roster = commonteamroster.CommonTeamRoster(team_id=team_dict["id"],
                                                         season=self.season).get_data_frames()[0]["PLAYER"].values
         
@@ -136,7 +140,9 @@ class DataFetcher:
         
         for team in active_players_json:
             team_data = self.home_team_data if self.home_away_dict[team] == Team.HOME else self.away_team_data
-            for player
+            active_players_df = pd.DataFrame(active_players_json[team], index=["Mins"]).T
+            active_players = active_players_df[active_players_df["Mins"] != 0]
+            team_data.active_players = active_players.index.values
 
     def update_active_players_json(self):
         """
@@ -172,7 +178,7 @@ class DataFetcher:
         away_roster = self.away_team_data.team_roster
 
         json =  {self.home_team: dict(zip(home_roster, [None for _ in range(len(home_roster))])),
-                    self.away_team:dict(zip(away_roster, [None for _ in range(len(away_roster))]))}
+                 self.away_team: dict(zip(away_roster, [None for _ in range(len(away_roster))]))}
         
         return json
 
@@ -182,7 +188,7 @@ class DataFetcher:
         """
         players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(lambda x: x.split(" "))
         players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(DataFetcher.convert_to_timestamp)
-        players_game_logs_df["REST_DAYS"] = players_game_logs_df["GAME_DATE"].diff(periods=-1)
+        players_game_logs_df["REST_DAYS"] = players_game_logs_df["GAME_DATE"].diff(periods=-1) - 1
         players_game_logs_df = players_game_logs_df.iloc[:-1, :]
         players_game_logs_df["REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
 
@@ -192,8 +198,8 @@ class DataFetcher:
     def add_home_away_columns(players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
         """
         """
-        players_game_logs_df[["HOME", 
-                              "AWAY"]] = tf.one_hot(players_game_logs_df["MATCHUP"].apply(DataFetcher.detect_home_or_away_games), 2)
+        players_game_logs_df.loc[:, ("HOME", "AWAY")] = tf.one_hot(players_game_logs_df["MATCHUP"].\
+                                                        apply(DataFetcher.detect_home_or_away_games), 2)
 
         return players_game_logs_df
 

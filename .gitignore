@@ -1,0 +1,4 @@
+
+artifacts/active_players.json
+*.csv
+*.xlsx
