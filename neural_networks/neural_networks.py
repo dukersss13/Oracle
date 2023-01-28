@@ -18,19 +18,18 @@ class SequentialNN:
         model = Sequential()
         model.add(Dense(300, activation=self.activation_func, input_shape=(self.input_shape,)))
         model.add(Dense(300, activation=self.activation_func, batch_size=13)) # Nash
-        model.add(Dropout(0.13))
-        model.add(Dense(300, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(1e-5))) # Shaq
-        model.add(Dense(300, activation=self.activation_func, batch_size=24, kernel_regularizer=regularizers.l2(1e-5))) # Kobe
-        model.add(Dropout(0.2)) # Ray Allen
-        model.add(Dense(300, activation=self.activation_func, batch_size=30)) # Curry
-        model.add(Dense(300, activation=self.activation_func, batch_size=41, kernel_regularizer=regularizers.l1(1e-5))) # Dirk
+        model.add(Dropout(0.30)) # Curry
+        model.add(Dense(300, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(1e-4))) # Shaq
+        model.add(Dense(300, activation=self.activation_func, batch_size=24, kernel_regularizer=regularizers.l2(1e-4))) # Kobe
+        model.add(Dropout(0.20)) # Ray Allen
+        model.add(Dense(300, activation=self.activation_func, batch_size=41, kernel_regularizer=regularizers.l2(1e-4))) # Dirk
         model.add(Dense(self.output_shape, activation=self.output_activation_func))
 
         return model
 
     def compile_model(self, learning_rate, loss_function, optimizer_function, metrics):
         if optimizer_function == "Adam":
-            optimizer_function = Adam
+            optimizer_function = Adam(learning_rate)
         elif optimizer_function == "SGD":
             optimizer_function = SGD
 
@@ -40,6 +39,6 @@ class SequentialNN:
             loss_function = tf.keras.losses.MeanAbsoluteError()
 
         model = self.create_neural_network()
-        model.compile(loss=loss_function, optimizer=optimizer_function(learning_rate), metrics=metrics)
+        model.compile(loss=loss_function, optimizer=optimizer_function, metrics=metrics)
 
         return model

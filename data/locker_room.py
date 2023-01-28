@@ -7,13 +7,14 @@ import numpy as np
 from enum import Enum
 
 from nba_api.stats.endpoints import (playergamelog, leagueseasonmatchups, boxscoretraditionalv2,
-                                     commonteamroster, teamgamelogs)
+                                     commonteamroster, teamgamelogs, leaguedashteamstats)
 from nba_api.stats.library.parameters import SeasonAll
 from nba_api.stats.static import teams, players
 import tensorflow as tf
 from dataclasses import dataclass
 
 pd.set_option('mode.chained_assignment', None)
+pd.set_option('display.max_columns', None)
 
 class Team(Enum):
     HOME = 0
@@ -21,21 +22,25 @@ class Team(Enum):
 
 
 @dataclass
-class TeamData:
+class DepthChart:
     team_name: str = None
+    team_id: int = None
     team_game_logs: pd.DataFrame = None
     team_roster: pd.DataFrame = None
     active_players: pd.DataFrame = None
     players_mins: dict = None
 
 
-class DataFetcher:
+class LockerRoom:
     def __init__(self, game_details: dict, nn_config: dict, season="2022-23"):
         """
-        Initialize the Data Fetcher
+        Initialize the Locker Room
 
-        :param home_team: _description_, defaults to None
-        :param away_team: _description_, defaults to None
+        In sports, the locker room is where both teams get ready for the game.
+        Similarly here, the LockerRoom class prepares the data for both teams
+        needed for forecasting.
+
+        :param game_details: 
         :param nn_config: _description_, defaults to None
         :param season: _description_, defaults to "2022-23"
         """
@@ -54,22 +59,25 @@ class DataFetcher:
         """
         Fetch the data needed for each team & create/update active players json
         """
-        self.home_team_data = TeamData()
-        self.away_team_data = TeamData()
+        self.home_depth_chart = DepthChart()
+        self.away_depth_chart = DepthChart()
 
-        self.home_team_data.team_name = self.home_team
-        self.away_team_data.team_name = self.away_team
+        self.home_depth_chart.team_name = self.home_team
+        self.away_depth_chart.team_name = self.away_team
 
-        self.home_team_data.team_roster = self.fetch_roster(self.home_team)
-        self.away_team_data.team_roster = self.fetch_roster(self.away_team)
+        self.home_depth_chart.team_roster = self.fetch_roster(self.home_team)
+        self.away_depth_chart.team_roster = self.fetch_roster(self.away_team)
+
+        self.home_team_id = LockerRoom.fetch_teams_id(self.home_team)
+        self.away_team_id = LockerRoom.fetch_teams_id(self.away_team)
 
         self.home_away_dict = {self.home_team: Team.HOME, self.away_team: Team.AWAY}
 
         self.update_active_players_json()
 
         if self.nn_config["holdout"]:
-            self.home_team_data.team_game_logs = self.fetch_team_game_logs(self.home_team)
-            self.away_team_data.team_game_logs = self.fetch_team_game_logs(self.away_team)
+            self.home_depth_chart.team_game_logs = self.fetch_team_game_logs(self.home_team)
+            self.away_depth_chart.team_game_logs = self.fetch_team_game_logs(self.away_team)
 
     @staticmethod
     def fetch_team_dict(team_name: str) -> dict:
@@ -106,7 +114,7 @@ class DataFetcher:
         else:
             team_name = team_name.capitalize()
 
-        team_dict = DataFetcher.fetch_team_dict(team_name)
+        team_dict = LockerRoom.fetch_team_dict(team_name)
         team_roster = commonteamroster.CommonTeamRoster(team_id=team_dict["id"],
                                                         season=self.season).get_data_frames()[0][["PLAYER", "PLAYER_ID"]]
         
@@ -134,7 +142,7 @@ class DataFetcher:
             active_players_json = json.load(f)
         
         for team in active_players_json:
-            team_data = self.home_team_data if self.home_away_dict[team] == Team.HOME else self.away_team_data
+            team_data = self.home_depth_chart if self.home_away_dict[team] == Team.HOME else self.away_depth_chart
             active_players_df = pd.DataFrame(active_players_json[team], index=["Mins"]).T
             active_players = active_players_df[active_players_df["Mins"] != 0]
             team_data.active_players = team_data.team_roster[np.isin(team_data.team_roster["PLAYER"],
@@ -171,8 +179,8 @@ class DataFetcher:
     def init_active_players_json(self):
         """
         """
-        home_roster = self.home_team_data.team_roster
-        away_roster = self.away_team_data.team_roster
+        home_roster = self.home_depth_chart.team_roster
+        away_roster = self.away_depth_chart.team_roster
 
         json =  {self.home_team: dict(zip(home_roster["PLAYER"].values, [None for _ in range(len(home_roster))])),
                  self.away_team: dict(zip(away_roster["PLAYER"].values, [None for _ in range(len(away_roster))]))}
@@ -207,8 +215,8 @@ class DataFetcher:
         players_game_logs_df = self.fetch_players_game_logs_df(players_id)
         players_game_logs_with_rest_df = self.add_rest_days(players_game_logs_df)
         most_recent_game_date = self.get_most_recent_game_date(players_game_logs_df)
-        complete_players_game_logs = DataFetcher.add_home_away_columns(players_game_logs_with_rest_df)
-        filtered_log = DataFetcher.filter_stats(complete_players_game_logs, self.predictors)
+        complete_players_game_logs = LockerRoom.add_home_away_columns(players_game_logs_with_rest_df)
+        filtered_log = LockerRoom.filter_stats(complete_players_game_logs, self.predictors)
 
         return filtered_log.values.astype(np.float), most_recent_game_date
 
@@ -220,7 +228,7 @@ class DataFetcher:
         :return: player's game logs df w/ rest days
         """
         players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(lambda x: x.split(" "))
-        players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(DataFetcher.convert_to_timestamp)
+        players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(LockerRoom.convert_to_timestamp)
         players_game_logs_df["REST_DAYS"] = players_game_logs_df["GAME_DATE"].diff(periods=-1)
         players_game_logs_df = players_game_logs_df.iloc[:-1, :]
         players_game_logs_df.loc[:, "REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
@@ -236,7 +244,7 @@ class DataFetcher:
         :return: player's game logs df w/ home & away columns
         """
         players_game_logs_df.loc[:, ("HOME", "AWAY")] = tf.one_hot(players_game_logs_df["MATCHUP"].\
-                                                        apply(DataFetcher.detect_home_or_away_games), 2)
+                                                        apply(LockerRoom.detect_home_or_away_games), 2)
 
         return players_game_logs_df
 
@@ -252,7 +260,7 @@ class DataFetcher:
         """
         Convert a date in string format to pd.Timestamp format
         """
-        months_dict = DataFetcher.init_months_dict()
+        months_dict = LockerRoom.init_months_dict()
         date = pd.Timestamp(f"{date_string[2]}-{months_dict[date_string[0]]}-{date_string[1][:-1]}")
 
         return date
@@ -273,7 +281,7 @@ class DataFetcher:
         return game_logs_df[columns_wanted]
 
     @staticmethod
-    def fetch_players_id(players_full_name: str) -> str:
+    def fetch_players_id(players_full_name: str) -> int:
         """
         Get players ID given full name
 
@@ -287,6 +295,21 @@ class DataFetcher:
             players_id = None
         
         return players_id
+
+    @staticmethod
+    def fetch_teams_id(team_name: str) -> int:
+        """_summary_
+
+        :param team_name: _description_
+        :return: _description_
+        """
+        try:
+            teams_id = LockerRoom.fetch_team_dict(team_name)["id"]
+        except:
+            print(f"WARNING: {team_name}'s ID cannot be found!")
+            teams_id = None
+        
+        return teams_id
 
     ### EXTRA
     def fetch_matchup_stats(self, off_player: str, def_player: str, season: str = "2021-22"):
@@ -304,9 +327,12 @@ class DataFetcher:
         return matchup_data
 
     def fetch_team_game_logs(self, team_name: str):
+        """_summary_
+
+        :param team_name: _description_
+        :return: _description_
         """
-        """
-        team_dict = DataFetcher.fetch_team_dict(team_name.capitalize())
+        team_dict = LockerRoom.fetch_team_dict(team_name.capitalize())
         team_game_logs = teamgamelogs.TeamGameLogs(team_id_nullable=team_dict["id"],
                                                    season_nullable=self.season).get_data_frames()[0]
         team_game_logs["GAME_DATE"] = [pd.Timestamp(game_date) for game_date in team_game_logs["GAME_DATE"]]
@@ -321,7 +347,7 @@ class DataFetcher:
         :return: _description_
         """
         game_date = pd.Timestamp(game_date)
-        team_game_logs = self.home_team_data.team_game_logs
+        team_game_logs = self.home_depth_chart.team_game_logs
         game_id = team_game_logs[team_game_logs["GAME_DATE"] == game_date]["GAME_ID"][0]
         box_score = boxscoretraditionalv2.BoxScoreTraditionalV2(game_id=game_id).get_data_frames()[0]
 

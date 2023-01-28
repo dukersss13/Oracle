@@ -3,7 +3,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import pandas as pd
 
-from data.data_fetcher import DataFetcher, Team
+from data.locker_room import LockerRoom, Team
 from neural_networks.neural_networks import SequentialNN
 
 
@@ -18,10 +18,9 @@ class Oracle:
         """
         self.game_date: str = game_details["game_date"]
         self.nn_config: dict = nn_config
-        self.validation_set: int = nn_config["validation_set"]
         self.holdout: bool = nn_config["holdout"]
 
-        self.data_fetcher = DataFetcher(game_details, nn_config)
+        self.data_fetcher = LockerRoom(game_details, nn_config)
         self.set_oracle_config(oracle_config)
 
         good_to_go = self.pause_to_set_active_players()
@@ -58,20 +57,9 @@ class Oracle:
         :param player_game_logs: game logs of individual player
         :return: training predictors & outputs
         """
-        x_train, y_train = player_game_logs[self.validation_set:, :-1], player_game_logs[self.validation_set:, -1]
+        x_train, y_train = player_game_logs[:, :-1], player_game_logs[:, -1]
 
         return x_train, y_train
-
-    def prepare_validation_data(self, player_game_logs: np.ndarray) -> tuple:
-        """
-        Prepare the validation set for the NN
-
-        :param player_game_logs: game logs of individual player
-        :return: validation X & Y sets
-        """
-        x_val, y_val = player_game_logs[:self.validation_set, :-1], player_game_logs[:self.validation_set, -1]
-
-        return x_val, y_val
 
     def prepare_testing_data(self, player_game_logs: np.ndarray, most_recent_game_date: pd.Timestamp, team: Team) -> np.ndarray:
         """
@@ -83,7 +71,7 @@ class Oracle:
         :return: x_test & y_test (if applicable)
         """
         home_or_away = np.array([1., 0.]) if team == Team.HOME else np.array([0., 1.])
-        x_test_statistics = np.mean(player_game_logs[:self.validation_set, :-4], axis=0)
+        x_test_statistics = np.mean(player_game_logs[:self.nn_config["MA_degree"], :-4], axis=0)
         rest_days = (pd.Timestamp(self.game_date) - most_recent_game_date).days
 
         x_test = np.concatenate([x_test_statistics, [rest_days], home_or_away])
@@ -100,13 +88,12 @@ class Oracle:
             return int(np.mean(filtered_players_logs[:, -1]))
 
         x_train, y_train = self.prepare_training_data(filtered_players_logs)
-        x_val, y_val = self.prepare_validation_data(filtered_players_logs)
         x_test = self.prepare_testing_data(filtered_players_logs, most_recent_game_date, team)
         x_test = self.assign_player_mins(players_full_name, x_test, team)
 
         players_trained_model = SequentialNN(self.nn_config)
         _ = players_trained_model.model.fit(x_train, y_train, batch_size=32, epochs=self.nn_config["epochs"], 
-                                            verbose=0, validation_data=(x_val, y_val),)
+                                            verbose=0, validation_split=self.nn_config["validation_split"],)
         forecasted_points = players_trained_model.model.predict(x_test.reshape(1, len(x_test)))[0][0]
         
         return int(forecasted_points)
@@ -119,9 +106,9 @@ class Oracle:
         :return forecast_df: forecast df for given team
         """
         if team == Team.HOME:
-            data = self.data_fetcher.home_team_data
+            data = self.data_fetcher.home_depth_chart
         elif team == Team.AWAY:
-            data = self.data_fetcher.away_team_data
+            data = self.data_fetcher.away_depth_chart
 
         forecast_dict = dict(zip(["PLAYER_NAME", "FORECASTED_POINTS"], [[] for _ in range(2)]))
         total_players = len(data.active_players)
@@ -152,8 +139,8 @@ class Oracle:
         :param x_test: X test (input predictors for NN)
         :return: x_test: X Test (input predictors for NN)
         """
-        players_mins_data = self.data_fetcher.home_team_data.players_mins if team == Team.HOME else \
-                            self.data_fetcher.away_team_data.players_mins
+        players_mins_data = self.data_fetcher.home_depth_chart.players_mins if team == Team.HOME else \
+                            self.data_fetcher.away_depth_chart.players_mins
         if players_mins_data[players_full_name] is not None:
             x_test[-4] = np.float(players_mins_data[players_full_name])
         
@@ -222,8 +209,8 @@ class Oracle:
         """
         print("Running Oracle")
         home_team_forecast_df = self.get_team_forecast(Team.HOME)
-        away_team_forecast_df = self.get_team_forecast(Team.AWAY)
+        # away_team_forecast_df = self.get_team_forecast(Team.AWAY)
         
-        if self.save_output:
-            print("Saving output files")
-            self.save_forecasts(home_team_forecast_df, away_team_forecast_df)
+        # if self.save_output:
+        #     print("Saving output files")
+        #     self.save_forecasts(home_team_forecast_df, away_team_forecast_df)
