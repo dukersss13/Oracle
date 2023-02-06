@@ -3,7 +3,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import pandas as pd
 
-from data.locker_room import LockerRoom, Team
+from data_prep.locker_room import LockerRoom, Team
 from neural_networks.neural_networks import SequentialNN
 
 
