@@ -1,9 +1,10 @@
+from ast import Tuple
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import pandas as pd
 
-from data_prep.locker_room import LockerRoom, Team
+from data_prep.locker_room import GamePlan, LockerRoom, Team
 from neural_networks.neural_networks import SequentialNN
 
 
@@ -20,15 +21,11 @@ class Oracle:
         self.nn_config: dict = nn_config
         self.holdout: bool = nn_config["holdout"]
 
-        self.data_fetcher = LockerRoom(game_details, nn_config)
+        self.locker_room = LockerRoom(game_details, nn_config)
         self.set_oracle_config(oracle_config)
-
-        good_to_go = self.pause_to_set_active_players()
-        if good_to_go:
-            self.data_fetcher.set_active_players()
-        
+         
         if nn_config["holdout"]:
-            self.box_score = self.data_fetcher.fetch_game_box_score(self.game_date)
+            self.box_score = self.locker_room.fetch_game_box_score(self.game_date)
 
     def set_oracle_config(self, oracle_config: dict):
         """
@@ -38,17 +35,6 @@ class Oracle:
         """
         self.save_output: bool = oracle_config["save_file"]
         self.output_path: str = oracle_config["output_path"]
-
-    def pause_to_set_active_players(self):
-        """
-        Pauses the program so user can set the lineups
-        """
-        print("\nSet active players in active_players.json.")
-        print("Input 0 for injured/DNP. Else, leave as null")
-        good_to_go = int(input(("Enter 1 to continue: ")))
-        assert good_to_go
-
-        return good_to_go
 
     def prepare_training_data(self, player_game_logs: np.ndarray) -> tuple:
         """
@@ -70,14 +56,35 @@ class Oracle:
         :param team: home or away
         :return: x_test & y_test (if applicable)
         """
+        ma_degree: int = self.nn_config["MA_degree"]
         home_or_away = np.array([1., 0.]) if team == Team.HOME else np.array([0., 1.])
-        x_test_statistics = np.mean(player_game_logs[:self.nn_config["MA_degree"], :-4], axis=0)
         rest_days = (pd.Timestamp(self.game_date) - most_recent_game_date).days
+
+        x_test_statistics = player_game_logs[:ma_degree, :-4]
 
         x_test = np.concatenate([x_test_statistics, [rest_days], home_or_away])
 
         return x_test
+
+    def prepare_matchup_statistics(self, off_player_name_and_id: Tuple,
+                                   matchups: dict, defensive_roster: np.ndarray) -> np.ndarray:
+        """_summary_
+
+        :param off_player_id: _description_
+        :param matchups: _description_
+        :param defensive_roster: _description_
+        :return: _description_
+        """
+        off_player_name, off_player_id = off_player_name_and_id
+        players_defensive_matchups = matchups[off_player_name]
+
+        for def_player_idx in players_defensive_matchups:
+            def_player_id = defensive_roster[def_player_idx]
+            matchup_data = self.locker_room.fetch_matchup_stats(off_player_id, def_player_id)
+
         
+
+
     def get_players_forecast(self, players_full_name: str, filtered_players_logs: np.ndarray,
                              most_recent_game_date: pd.Timestamp, team: Team) -> int:
         """
@@ -95,7 +102,7 @@ class Oracle:
         _ = players_trained_model.model.fit(x_train, y_train, batch_size=32, epochs=self.nn_config["epochs"], 
                                             verbose=0, validation_split=self.nn_config["validation_split"],)
         forecasted_points = players_trained_model.model.predict(x_test.reshape(1, len(x_test)))[0][0]
-        
+
         return int(forecasted_points)
 
     def get_team_forecast(self, team: Team):
@@ -106,9 +113,9 @@ class Oracle:
         :return forecast_df: forecast df for given team
         """
         if team == Team.HOME:
-            data = self.data_fetcher.home_depth_chart
+            data = self.locker_room.home_game_plan
         elif team == Team.AWAY:
-            data = self.data_fetcher.away_depth_chart
+            data = self.locker_room.away_game_plan
 
         forecast_dict = dict(zip(["PLAYER_NAME", "FORECASTED_POINTS"], [[] for _ in range(2)]))
         total_players = len(data.active_players)
@@ -117,7 +124,9 @@ class Oracle:
         print(f"\nStarting forecast for the {data.team_name}")
         for players_name, players_id in data.active_players.iterrows():
             print(f"\nFetching game logs for: {players_name}")
-            filtered_players_logs, most_recent_game_date = self.data_fetcher.get_filtered_players_logs(int(players_id))
+            filtered_players_logs, most_recent_game_date = self.locker_room.get_filtered_players_logs(players_id)
+            matchups_statistics = self.prepare_matchup_statistics((players_name, players_id), self.locker_room.home_game_plan.matchups,
+                                                                  self.locker_room.away_game_plan.team_roster)
 
             print(f"Starting forecast for: {players_name}")
             forecasted_points = self.get_players_forecast(players_name, filtered_players_logs, 
@@ -139,10 +148,11 @@ class Oracle:
         :param x_test: X test (input predictors for NN)
         :return: x_test: X Test (input predictors for NN)
         """
-        players_mins_data = self.data_fetcher.home_depth_chart.players_mins if team == Team.HOME else \
-                            self.data_fetcher.away_depth_chart.players_mins
+        players_mins_data = self.locker_room.home_game_plan.players_mins if team == Team.HOME else \
+                            self.locker_room.away_game_plan.players_mins
+
         if players_mins_data[players_full_name] is not None:
-            x_test[-4] = np.float(players_mins_data[players_full_name])
+            x_test[-4] = float(players_mins_data[players_full_name])
         
         return x_test
 
@@ -191,7 +201,7 @@ class Oracle:
         :param home_team_forecast_df: forecast df for home team
         :param away_team_forecast_df: forecast df for away team
         """
-        output_folder_name = f"{self.data_fetcher.away_team}_@_{self.data_fetcher.home_team}_{self.game_date}"
+        output_folder_name = f"{self.locker_room.away_team}_@_{self.locker_room.home_team}_{self.game_date}"
         dir_path = os.path.join(self.output_path, output_folder_name)
 
         if not os.path.exists(dir_path):
@@ -200,8 +210,8 @@ class Oracle:
         
         print(f"Saving forecasts under {dir_path}")
         with pd.ExcelWriter(f"{dir_path}/Forecast.xlsx") as writer:
-            home_team_forecast_df.to_excel(writer, sheet_name=f"{self.data_fetcher.home_team} Forecast", index=False)
-            away_team_forecast_df.to_excel(writer, sheet_name=f"{self.data_fetcher.away_team} Forecast", index=False)
+            home_team_forecast_df.to_excel(writer, sheet_name=f"{self.locker_room.home_team} Forecast", index=False)
+            away_team_forecast_df.to_excel(writer, sheet_name=f"{self.locker_room.away_team} Forecast", index=False)
 
     def run(self):
         """
@@ -209,7 +219,7 @@ class Oracle:
         """
         print("Running Oracle")
         home_team_forecast_df = self.get_team_forecast(Team.HOME)
-        # away_team_forecast_df = self.get_team_forecast(Team.AWAY)
+        away_team_forecast_df = self.get_team_forecast(Team.AWAY)
         
         # if self.save_output:
         #     print("Saving output files")

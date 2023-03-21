@@ -2,7 +2,7 @@ from neural_networks.oracle import Oracle
 
 
 if __name__ == '__main__':
-    predictors = ["FG_PCT", "FGA", "FG3_PCT", "FG3A", "FT_PCT", "FTA",
+    predictors = ["FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA",
                   "AST", "TOV", "PF", "MIN",
                   "REST_DAYS", "HOME", "AWAY", "PTS"]
 
@@ -17,5 +17,7 @@ if __name__ == '__main__':
     oracle = Oracle(game_details=game_details, oracle_config=oracle_config, nn_config=nn_config)
     oracle.run()
 
-    # Take into account of teammates
     # Take into account of opponents
+    # 1. Get rid of player index dict
+    # 2. Only use active players for matchup json
+    # 3. Pull matchup defensive stats when forecast

@@ -21,15 +21,20 @@ class Team(Enum):
     HOME = 0
     AWAY = 1
 
+class JsonType(Enum):
+    ACTIVE_PLAYERS = 0
+    MATCHUPS = 1
 
 @dataclass
-class DepthChart:
+class GamePlan:
     team_name: str = None
     team_id: int = None
     team_game_logs: pd.DataFrame = None
     team_roster: pd.DataFrame = None
+    player_idx_lut: dict = None
     active_players: pd.DataFrame = None
     players_mins: dict = None
+    matchups: dict = None
 
 
 class LockerRoom:
@@ -52,12 +57,11 @@ class LockerRoom:
         self.nn_config = nn_config
         self.predictors = nn_config["predictors"]
         self.num_seasons = nn_config["num_seasons"]
-        self.nba_teams = pd.read_excel("static_data/nba_teams.xlsx")
+        self.nba_teams_info = pd.read_excel("static_data/nba_teams.xlsx")
 
-        self.target_path = f"{os.getcwd()}/artifacts/active_players.json"
         # self.fetch_team_scouting_report(self.home_team, date_to=self.game_date)
-        luka_id = self.fetch_players_id("Luka Doncic")
-        luka_logs = self.get_filtered_players_logs(luka_id)
+        # luka_id = self.fetch_players_id("Luka Doncic")
+        # luka_logs = self.get_filtered_players_logs(luka_id)
         self.fetch_teams_data()
 
     def fetch_teams_data(self):
@@ -67,35 +71,55 @@ class LockerRoom:
         home_lookup_values = ["nickname", self.home_team]
         away_lookup_values = ["nickname", self.away_team]
 
-        self.home_depth_chart = DepthChart()
-        self.away_depth_chart = DepthChart()
+        self.home_game_plan = GamePlan()
+        self.away_game_plan = GamePlan()
 
-        self.home_depth_chart.team_name = self.home_team
-        self.away_depth_chart.team_name = self.away_team
+        self.home_game_plan.team_name = self.home_team
+        self.away_game_plan.team_name = self.away_team
 
-        self.home_depth_chart.team_roster = self.fetch_roster(home_lookup_values)
-        self.away_depth_chart.team_roster = self.fetch_roster(away_lookup_values)
+        self.home_game_plan.team_roster = self.fetch_roster(home_lookup_values)
+        self.away_game_plan.team_roster = self.fetch_roster(away_lookup_values)
 
-        self.home_team_id = LockerRoom.fetch_teams_id(home_lookup_values)
-        self.away_team_id = LockerRoom.fetch_teams_id(away_lookup_values)
+        self.home_game_plan.player_idx_lut = LockerRoom.get_player_lut(self.home_game_plan.team_roster)
+        self.away_game_plan.player_idx_lut = LockerRoom.get_player_lut(self.away_game_plan.team_roster)
+
+        self.home_team_id = self.fetch_teams_id(home_lookup_values)
+        self.away_team_id = self.fetch_teams_id(away_lookup_values)
 
         self.home_away_dict = {self.home_team: Team.HOME, self.away_team: Team.AWAY}
 
-        self.update_active_players_json()
+        self.set_game_plan()
 
         if self.nn_config["holdout"]:
-            self.home_depth_chart.team_game_logs = self.fetch_team_game_logs(home_lookup_values)
-            self.away_depth_chart.team_game_logs = self.fetch_team_game_logs(away_lookup_values)
-    
-    def get_team_name_from_abbreviation(self, team_abbreviation: str) -> str:
-        """_summary_
+            self.home_game_plan.team_game_logs = self.fetch_team_game_logs(home_lookup_values)
 
-        :param team_abbreviation: _description_
-        :return: _description_
+    def set_game_plan(self):
         """
-        team_nickname = self.nba_teams[self.nba_teams["abbreviation"] == team_abbreviation]["nickname"]
+        Set the game plan such as active players & matchups
+        """
+        self.update_game_plan(json_type=JsonType.ACTIVE_PLAYERS)
+        set_active_players = LockerRoom.pause_for_configurations(JsonType.ACTIVE_PLAYERS)
+        if set_active_players:
+            self.set_active_players()
 
-        return team_nickname
+        self.update_game_plan(json_type=JsonType.MATCHUPS)
+        set_matchups = LockerRoom.pause_for_configurations(JsonType.MATCHUPS)
+        if set_matchups:
+            self.load_defensive_matchups()
+    
+    @staticmethod
+    def pause_for_configurations(json_type: JsonType):
+        """
+        Pauses the program so user can set the lineups
+        """
+        if json_type == JsonType.ACTIVE_PLAYERS:
+            print("\nSet active players in active_players.json.")
+            print("Input 0 for injured/DNP. Else, leave as null")
+        elif json_type == JsonType.MATCHUPS:
+            print("\nSet defensive matchups. Enter the defensive player ID in the offensive player's matchup list.")
+        good_to_go = input(("Enter any key to continue: "))
+
+        return good_to_go
 
     @staticmethod
     def init_months_dict() -> dict:
@@ -106,6 +130,28 @@ class LockerRoom:
         months_dict = dict(zip(months, range(1, 13)))
 
         return months_dict
+
+    @staticmethod
+    def get_player_lut(team_roster: np.ndarray) -> dict:
+        """_summary_
+
+        :param team_roster: _description_
+        """
+        player_lut = dict(zip(range(len(team_roster)), team_roster["PLAYER"].values))
+
+        return player_lut
+
+    @staticmethod
+    def remove_id_from_matchup_dict(matchup_dict: dict) -> dict:
+        """_summary_
+
+        :param matchup_dict: _description_
+        :return: _description_
+        """
+        new_keys = [key.split("-")[0] for key in matchup_dict.keys()]
+        new_matchup_dict = dict(zip(new_keys, matchup_dict.values()))
+        
+        return new_matchup_dict
 
     def fetch_roster(self, team_lookup_tuple: list) -> pd.DataFrame:
         """
@@ -143,55 +189,89 @@ class LockerRoom:
         """
         Set active players & allocate their minutes if need be
         """
-        with open(self.target_path) as f:
+        with open(self.active_players_path) as f:
             active_players_json = json.load(f)
         
         for team in active_players_json:
-            team_data = self.home_depth_chart if self.home_away_dict[team] == Team.HOME else self.away_depth_chart
+            team_data = self.home_game_plan if self.home_away_dict[team] == Team.HOME else self.away_game_plan
             active_players_df = pd.DataFrame(active_players_json[team], index=["Mins"]).T
             active_players = active_players_df[active_players_df["Mins"] != 0]
             team_data.active_players = team_data.team_roster[np.isin(team_data.team_roster["PLAYER"],
                                                              active_players.index)].set_index("PLAYER")
             team_data.players_mins = active_players.to_dict()["Mins"]
 
-    def update_active_players_json(self):
+    def load_defensive_matchups(self):
+        """
+        Load in the configurated defensive matchups
+        & remove the player ID from dict keys
+        """
+        with open(self.matchups_path) as f:
+            matchups_json = json.load(f)
+        
+        self.home_game_plan.matchups = LockerRoom.remove_id_from_matchup_dict(matchups_json[self.home_team])
+        self.away_game_plan.matchups = LockerRoom.remove_id_from_matchup_dict(matchups_json[self.away_team])
+
+    def update_game_plan(self, json_type: JsonType):
         """
         Update the active players json to set active players or manually assign minutes
-        """
-        # Check if the json file exists in the first place
-        # If not, create one
-        self.check_active_players_json_exists()
 
-        with open(self.target_path) as f:
-            active_players_json = json.load(f)
-        
-        for team_name in active_players_json:
+        :param json_type: whether it's active players or matchups json
+        """
+        self.active_players_path = f"{os.getcwd()}/artifacts/active_players.json"
+        self.matchups_path = f"{os.getcwd()}/artifacts/matchups.json"
+
+        if json_type == JsonType.ACTIVE_PLAYERS:
+            path = self.active_players_path
+        elif json_type == JsonType.MATCHUPS:
+            path = self.matchups_path
+
+        self.check_requisite_jsons(path, json_type)
+        with open(path) as f:
+            prereq_json = json.load(f)
+
+        # Refreshes the file & overwrite
+        for team_name in prereq_json:
             del team_name
 
-        active_players_json = self.init_active_players_json()
-        with open(self.target_path, 'w') as f:
-            json.dump(active_players_json, f, indent=1)
+        prereq_json = self.init_rerequisite_jsons(json_type)
+        with open(path, 'w') as f:
+            json.dump(prereq_json, f, indent=1)
 
-    def check_active_players_json_exists(self):
+    def check_requisite_jsons(self, json_path: str, json_type: JsonType):
         """
-        Check if active players json exists. If not, create one.
+        Check if active players/matchus json exists. If not, create one.
         """
-        if not os.path.exists(self.target_path):
-            active_players_json = self.init_active_players_json()
-            with open(self.target_path, 'w') as f:
-                json.dumps(active_players_json, f, indent=1)
+        if not os.path.exists(json_path):
+            prereq_json = self.init_rerequisite_jsons(json_type)
+            with open(json_path, 'w') as f:
+                json.dump(prereq_json, f, indent=1)
 
-    def init_active_players_json(self):
+    def init_rerequisite_jsons(self, json_type: JsonType):
         """
         Initialize the active players json
         """
-        home_roster = self.home_depth_chart.team_roster
-        away_roster = self.away_depth_chart.team_roster
+        home_roster = self.home_game_plan.team_roster
+        away_roster = self.away_game_plan.team_roster
 
-        json =  {self.home_team: dict(zip(home_roster["PLAYER"].values, [None for _ in range(len(home_roster))])),
-                 self.away_team: dict(zip(away_roster["PLAYER"].values, [None for _ in range(len(away_roster))]))}
+        if json_type == JsonType.ACTIVE_PLAYERS:
+            json =  {self.home_team: dict(zip(home_roster["PLAYER"].values, [None for _ in range(len(home_roster))])),
+                     self.away_team: dict(zip(away_roster["PLAYER"].values, [None for _ in range(len(away_roster))]))}
+
+        elif json_type == JsonType.MATCHUPS:
+            json = {self.home_team: LockerRoom.create_matchup_keys_json(home_roster["PLAYER"].values),
+                    self.away_team: LockerRoom.create_matchup_keys_json(away_roster["PLAYER"].values)}
         
         return json
+    
+    @staticmethod
+    def create_matchup_keys_json(roster: np.ndarray):
+        """_summary_
+
+        :param home_roster: _description_
+        """
+        matchups_dict = {f"{name}-{idx}": [] for idx, name in enumerate(roster)}
+
+        return matchups_dict
 
     def fetch_players_game_logs_df(self, players_id: str) -> pd.DataFrame:
         """
@@ -222,11 +302,9 @@ class LockerRoom:
         players_game_logs_with_rest_df = self.add_rest_days(players_game_logs_df)
         most_recent_game_date = self.get_most_recent_game_date(players_game_logs_df)
         complete_players_game_logs = LockerRoom.add_home_away_columns(players_game_logs_with_rest_df)
-        players_logs_with_opponent_defense = self.add_opponent_defensive_stats(complete_players_game_logs)
-        # filtered_log = LockerRoom.filter_stats(complete_players_game_logs, self.predictors)
+        filtered_log = LockerRoom.filter_stats(complete_players_game_logs, self.predictors)
 
-        return complete_players_game_logs
-        # return filtered_log.values.astype(np.float), most_recent_game_date
+        return filtered_log.values.astype(float), most_recent_game_date
 
     def add_opponent_defensive_stats(self, players_logs: pd.DataFrame) -> pd.DataFrame:
         """_summary_
@@ -245,7 +323,6 @@ class LockerRoom:
         defensive_logs = pd.concat(defensive_logs, axis=0)
 
         return pd.concat([players_logs, defensive_logs], axis=1)
-
 
     def fetch_team_scouting_report(self, team_abbreviation: str, game_date: pd.Timestamp):
         """_summary_
@@ -356,7 +433,7 @@ class LockerRoom:
         """
         try:
             name_type, name = lookup_values
-            teams_id = self.nba_teams[self.nba_teams[name_type]==name]["id"]
+            teams_id = self.nba_teams_info[self.nba_teams_info[name_type]==name]["id"]
         except:
             print(f"WARNING: {lookup_values}'s ID cannot be found!")
             teams_id = None
@@ -370,27 +447,13 @@ class LockerRoom:
         :param team_name: name of the team (i.e. Mavericks, Lakers)
         :return: the team's game logs
         """
-        team_dict = LockerRoom.fetch_team_dict(team_name.capitalize())
-        team_game_logs = teamgamelogs.TeamGameLogs(team_id_nullable=team_dict["id"],
+        col, name = team_name
+        team_id = self.nba_teams_info[self.nba_teams_info[col]==name]["id"]
+        team_game_logs = teamgamelogs.TeamGameLogs(team_id_nullable=team_id,
                                                    season_nullable=self.season).get_data_frames()[0]
         team_game_logs["GAME_DATE"] = [pd.Timestamp(game_date) for game_date in team_game_logs["GAME_DATE"]]
 
         return team_game_logs
-
-    ### EXTRA
-    def fetch_matchup_stats(self, off_player: str, def_player: str, season: str = "2021-22"):
-        """
-        :param off_player:
-        :param def_player:
-        :param season:
-        :return:
-        """
-        off_player_id = self.fetch_players_id(off_player)
-        def_player_id = self.fetch_players_id(def_player)
-        matchup_data = leagueseasonmatchups.LeagueSeasonMatchups(off_player_id_nullable=off_player_id,
-                                                                 def_player_id_nullable=def_player_id,
-                                                                 season=season).get_data_frames()[0]
-        return matchup_data
 
     def fetch_game_box_score(self, game_date: str) -> pd.DataFrame:
         """_summary_
@@ -400,8 +463,20 @@ class LockerRoom:
         :return: _description_
         """
         game_date = pd.Timestamp(game_date)
-        team_game_logs = self.home_depth_chart.team_game_logs
-        game_id = team_game_logs[team_game_logs["GAME_DATE"] == game_date]["GAME_ID"][0]
+        team_game_logs = self.home_game_plan.team_game_logs
+        game_id = team_game_logs[team_game_logs["GAME_DATE"] == game_date]["GAME_ID"].values[0]
         box_score = boxscoretraditionalv2.BoxScoreTraditionalV2(game_id=game_id).get_data_frames()[0]
 
         return box_score
+
+    def fetch_matchup_stats(self, off_player_id: int, def_player_id: int, season: str = "2021-22"):
+        """
+        :param off_player:
+        :param def_player:
+        :param season:
+        :return:
+        """
+        matchup_data = leagueseasonmatchups.LeagueSeasonMatchups(off_player_id_nullable=off_player_id,
+                                                                 def_player_id_nullable=def_player_id,
+                                                                 season=season).get_data_frames()[0]
+        return matchup_data
