@@ -28,15 +28,15 @@ class SequentialNN:
         return model
 
     def compile_model(self, learning_rate, loss_function, optimizer_function, metrics):
-        if optimizer_function == "Adam":
-            optimizer_function = Adam(learning_rate)
-        elif optimizer_function == "SGD":
-            optimizer_function = SGD
-
         if loss_function == "MSE":
             loss_function = tf.keras.losses.MeanSquaredError()
         elif loss_function == "MAE":
             loss_function = tf.keras.losses.MeanAbsoluteError()
+
+        if optimizer_function == "Adam":
+            optimizer_function = Adam(learning_rate)
+        elif optimizer_function == "SGD":
+            optimizer_function = SGD(learning_rate)
 
         model = self.create_neural_network()
         model.compile(loss=loss_function, optimizer=optimizer_function, metrics=metrics)
