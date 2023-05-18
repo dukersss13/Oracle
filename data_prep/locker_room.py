@@ -22,8 +22,7 @@ class Team(Enum):
     AWAY = 1
 
 class JsonType(Enum):
-    ACTIVE_PLAYERS = 0
-    MATCHUPS = 1
+    ACTIVE_PLAYERS = 1
 
 @dataclass
 class GamePlan:
@@ -34,7 +33,6 @@ class GamePlan:
     player_idx_lut: dict = None
     active_players: pd.DataFrame = None
     players_mins: dict = None
-    matchups: dict = None
 
 
 class LockerRoom:
@@ -57,7 +55,7 @@ class LockerRoom:
         self.nn_config = nn_config
         self.predictors = nn_config["predictors"]
         self.num_seasons = nn_config["num_seasons"]
-        self.nba_teams_info = pd.read_excel("static_data/nba_teams.xlsx")
+        self.nba_teams_info = pd.read_excel("data/static_data/static_team_info.csv")
 
         # self.fetch_team_scouting_report(self.home_team, date_to=self.game_date)
         # luka_id = self.fetch_players_id("Luka Doncic")
@@ -80,9 +78,6 @@ class LockerRoom:
         self.home_game_plan.team_roster = self.fetch_roster(home_lookup_values)
         self.away_game_plan.team_roster = self.fetch_roster(away_lookup_values)
 
-        self.home_game_plan.player_idx_lut = LockerRoom.get_player_lut(self.home_game_plan.team_roster)
-        self.away_game_plan.player_idx_lut = LockerRoom.get_player_lut(self.away_game_plan.team_roster)
-
         self.home_team_id = self.fetch_teams_id(home_lookup_values)
         self.away_team_id = self.fetch_teams_id(away_lookup_values)
 
@@ -97,15 +92,10 @@ class LockerRoom:
         """
         Set the game plan such as active players & matchups
         """
-        self.update_game_plan(json_type=JsonType.ACTIVE_PLAYERS)
-        set_active_players = LockerRoom.pause_for_configurations(JsonType.ACTIVE_PLAYERS)
+        self.update_game_plan()
+        set_active_players = LockerRoom.pause_for_configurations()
         if set_active_players:
             self.set_active_players()
-
-        self.update_game_plan(json_type=JsonType.MATCHUPS)
-        set_matchups = LockerRoom.pause_for_configurations(JsonType.MATCHUPS)
-        if set_matchups:
-            self.load_defensive_matchups()
     
     @staticmethod
     def pause_for_configurations(json_type: JsonType):
@@ -115,9 +105,8 @@ class LockerRoom:
         if json_type == JsonType.ACTIVE_PLAYERS:
             print("\nSet active players in active_players.json.")
             print("Input 0 for injured/DNP. Else, leave as null")
-        elif json_type == JsonType.MATCHUPS:
-            print("\nSet defensive matchups. Enter the defensive player ID in the offensive player's matchup list.")
-        good_to_go = input(("Enter any key to continue: "))
+
+        good_to_go = input(("Enter 1 to continue: "))
 
         return good_to_go
 
@@ -130,28 +119,6 @@ class LockerRoom:
         months_dict = dict(zip(months, range(1, 13)))
 
         return months_dict
-
-    @staticmethod
-    def get_player_lut(team_roster: np.ndarray) -> dict:
-        """_summary_
-
-        :param team_roster: _description_
-        """
-        player_lut = dict(zip(range(len(team_roster)), team_roster["PLAYER"].values))
-
-        return player_lut
-
-    @staticmethod
-    def remove_id_from_matchup_dict(matchup_dict: dict) -> dict:
-        """_summary_
-
-        :param matchup_dict: _description_
-        :return: _description_
-        """
-        new_keys = [key.split("-")[0] for key in matchup_dict.keys()]
-        new_matchup_dict = dict(zip(new_keys, matchup_dict.values()))
-        
-        return new_matchup_dict
 
     def fetch_roster(self, team_lookup_tuple: list) -> pd.DataFrame:
         """
@@ -200,32 +167,17 @@ class LockerRoom:
                                                              active_players.index)].set_index("PLAYER")
             team_data.players_mins = active_players.to_dict()["Mins"]
 
-    def load_defensive_matchups(self):
-        """
-        Load in the configurated defensive matchups
-        & remove the player ID from dict keys
-        """
-        with open(self.matchups_path) as f:
-            matchups_json = json.load(f)
-        
-        self.home_game_plan.matchups = LockerRoom.remove_id_from_matchup_dict(matchups_json[self.home_team])
-        self.away_game_plan.matchups = LockerRoom.remove_id_from_matchup_dict(matchups_json[self.away_team])
-
-    def update_game_plan(self, json_type: JsonType):
+    def update_game_plan(self):
         """
         Update the active players json to set active players or manually assign minutes
 
         :param json_type: whether it's active players or matchups json
         """
         self.active_players_path = f"{os.getcwd()}/artifacts/active_players.json"
-        self.matchups_path = f"{os.getcwd()}/artifacts/matchups.json"
 
-        if json_type == JsonType.ACTIVE_PLAYERS:
-            path = self.active_players_path
-        elif json_type == JsonType.MATCHUPS:
-            path = self.matchups_path
+        path = self.active_players_path
 
-        self.check_requisite_jsons(path, json_type)
+        self.check_requisite_jsons(path)
         with open(path) as f:
             prereq_json = json.load(f)
 
@@ -233,7 +185,7 @@ class LockerRoom:
         for team_name in prereq_json:
             del team_name
 
-        prereq_json = self.init_rerequisite_jsons(json_type)
+        prereq_json = self.init_rerequisite_jsons()
         with open(path, 'w') as f:
             json.dump(prereq_json, f, indent=1)
 
@@ -246,32 +198,17 @@ class LockerRoom:
             with open(json_path, 'w') as f:
                 json.dump(prereq_json, f, indent=1)
 
-    def init_rerequisite_jsons(self, json_type: JsonType):
+    def init_rerequisite_jsons(self):
         """
         Initialize the active players json
         """
         home_roster = self.home_game_plan.team_roster
         away_roster = self.away_game_plan.team_roster
 
-        if json_type == JsonType.ACTIVE_PLAYERS:
-            json =  {self.home_team: dict(zip(home_roster["PLAYER"].values, [None for _ in range(len(home_roster))])),
-                     self.away_team: dict(zip(away_roster["PLAYER"].values, [None for _ in range(len(away_roster))]))}
-
-        elif json_type == JsonType.MATCHUPS:
-            json = {self.home_team: LockerRoom.create_matchup_keys_json(home_roster["PLAYER"].values),
-                    self.away_team: LockerRoom.create_matchup_keys_json(away_roster["PLAYER"].values)}
+        json =  {self.home_team: dict(zip(home_roster["PLAYER"].values, [None for _ in range(len(home_roster))])),
+                    self.away_team: dict(zip(away_roster["PLAYER"].values, [None for _ in range(len(away_roster))]))}
         
         return json
-    
-    @staticmethod
-    def create_matchup_keys_json(roster: np.ndarray):
-        """_summary_
-
-        :param home_roster: _description_
-        """
-        matchups_dict = {f"{name}-{idx}": [] for idx, name in enumerate(roster)}
-
-        return matchups_dict
 
     def fetch_players_game_logs_df(self, players_id: str) -> pd.DataFrame:
         """
