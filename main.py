@@ -18,6 +18,5 @@ if __name__ == '__main__':
     oracle.run()
 
     # Take into account of opponents
-    # 1. Get rid of player index dict
-    # 2. Only use active players for matchup json
-    # 3. Pull matchup defensive stats when forecast
+    # 1. For each current opponent, search for their defense statistics + look at players' performance against 3 closest's
+    # defensive teams for each category

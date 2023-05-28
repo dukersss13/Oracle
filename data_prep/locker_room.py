@@ -9,7 +9,7 @@ from enum import Enum
 from nba_api.stats.endpoints import (playergamelog, leagueseasonmatchups, boxscoretraditionalv2,
                                      commonteamroster, teamgamelogs, leaguedashptteamdefend)
 from nba_api.stats.library.parameters import SeasonAll
-from nba_api.stats.static import teams, players
+from nba_api.stats.static import  players
 import tensorflow as tf
 from dataclasses import dataclass
 
@@ -21,8 +21,10 @@ class Team(Enum):
     HOME = 0
     AWAY = 1
 
+
 class JsonType(Enum):
     ACTIVE_PLAYERS = 1
+
 
 @dataclass
 class GamePlan:
@@ -406,7 +408,7 @@ class LockerRoom:
 
         return box_score
 
-    def fetch_matchup_stats(self, off_player_id: int, def_player_id: int, season: str = "2021-22"):
+    def fetch_matchup_stats(self, off_player_id: int, def_player_id: int, season: str = "2022-23"):
         """
         :param off_player:
         :param def_player:
