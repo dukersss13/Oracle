@@ -1,7 +1,5 @@
 
 artifacts/active_players.json
-*.csv
-*.xlsx
 artifacts/active_players.json
 artifacts/matchups.json
 artifacts/active_players.json
