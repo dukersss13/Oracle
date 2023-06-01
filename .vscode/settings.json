@@ -3,5 +3,7 @@
         "Oracle"
     ],
     "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
-}
+    "python.testing.pytestEnabled": true,
+    "terminal.integrated.fontFamily": "Consolas",
+    "debug.console.fontFamily": "Consolas"
+}   
