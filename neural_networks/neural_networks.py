@@ -1,8 +1,6 @@
-import tensorflow as tf
-
-from tensorflow.keras import Sequential, regularizers
-from tensorflow.keras.layers import Dense, Dropout
-from tensorflow.keras.optimizers import SGD, Adam
+from keras import Sequential, regularizers
+from keras.layers import Dense, Dropout
+from keras.optimizers import SGD, Adam
 
 
 class SequentialNN:
@@ -27,9 +25,9 @@ class SequentialNN:
 
     def compile_model(self, learning_rate, loss_function, optimizer_function, metrics):
         if loss_function == "MSE":
-            loss_function = tf.keras.losses.MeanSquaredError()
+            loss_function = keras.losses.MeanSquaredError()
         elif loss_function == "MAE":
-            loss_function = tf.keras.losses.MeanAbsoluteError()
+            loss_function = keras.losses.MeanAbsoluteError()
 
         if optimizer_function == "Adam":
             optimizer_function = Adam(learning_rate)

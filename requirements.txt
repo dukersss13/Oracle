@@ -1,6 +1,7 @@
 numpy
-tensorflow
 xgboost
-sklearn
-pandas
-matplotlib
+sklearn 
+pandas 
+matplotlib 
+keras
+nba_api

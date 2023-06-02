@@ -10,7 +10,7 @@ from nba_api.stats.endpoints import (playergamelog, leagueseasonmatchups, boxsco
                                      commonteamroster, teamgamelogs, leaguedashptteamdefend)
 from nba_api.stats.library.parameters import SeasonAll
 from nba_api.stats.static import  players
-import tensorflow as tf
+from keras.utils import to_categorical
 from dataclasses import dataclass
 
 pd.set_option('mode.chained_assignment', None)
@@ -310,7 +310,7 @@ class LockerRoom:
         :param players_game_logs_df: player's game logs df
         :return: player's game logs df w/ home & away columns
         """
-        players_game_logs_df.loc[:, ("HOME", "AWAY")] = tf.one_hot(players_game_logs_df["MATCHUP"].\
+        players_game_logs_df.loc[:, ("HOME", "AWAY")] = to_categorical(players_game_logs_df["MATCHUP"].\
                                                         apply(LockerRoom.detect_home_or_away_games), 2)
 
         return players_game_logs_df
