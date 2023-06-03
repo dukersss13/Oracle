@@ -1,11 +1,11 @@
+import os
 import pandas as pd
-import numpy as np
 
 from nba_api.stats.endpoints import leaguedashptteamdefend, teamgamelogs
 
 
 nba_teams_info = pd.read_csv("data/static_data/static_team_info.csv")
-seasons = ["2022-23"]
+seasons = ["2020-21", "2021-22", "2022-23"]
 
 
 def fetch_team_game_logs(team_id: str, season: str):
@@ -23,8 +23,80 @@ def fetch_team_game_logs(team_id: str, season: str):
 
 
 def save_teams_logs_per_season(seasons: list):
-    
+    """
+    Save the game logs of all teams for specified season(s)
+
+    :param seasons: list of season(s) of the games to save
+    """
     for season in seasons:
         for team_id in nba_teams_info["id"]:
             team_game_logs = fetch_team_game_logs(team_id, season)
             team_game_logs.to_csv(f"data/seasonal_data/20{season[-2:]}/team_logs/{team_game_logs['TEAM_ABBREVIATION'].values[0]}.csv")
+
+
+def merge_defensive_stats(season: str, game_log: pd.DataFrame, pre_asb_stats: list,
+                          post_asb_stats: list, metrics: pd.DataFrame=None) -> pd.DataFrame:
+    """
+    Merge the necessary defensive stats to current team game logs
+    The stats are separated by the All Star Break (ASB) date
+
+    It's important to distinguish the 2 periods because historically
+    teams perform differently after this break point, due to many changes
+    like trades, signings, waivers, etc...
+
+    :param season: season string, ex: "2022-23" is the 2023 NBA season
+    :param game_log: game log of the NBA team
+    :param pre_asb_stats: list of all pre-ASB stats
+    :param post_asb_stats: list of all post-ASB stats
+    :param metrics: this team's defensive metrics for the entire season
+
+    :return: a complete game log with all stats merged as new columns
+    """
+    all_star_date = f"20{season}-02-14"
+    
+    for defensive_stats in pre_asb_stats:
+        pre_asb = game_log[game_log["GAME_DATE"] < all_star_date].merge(defensive_stats, on="TEAM_ID")
+    
+    for defensive_stats in post_asb_stats:
+        post_asb = game_log[game_log["GAME_DATE"] >= all_star_date].merge(defensive_stats, on="TEAM_ID")
+    
+    complete_log = pd.concat([pre_asb, post_asb])
+    
+    if metrics is not None:
+        complete_log = complete_log.merge(metrics, on="TEAM_ID")
+    
+    return complete_log
+
+
+def merge_defensive_stats_to_game_logs(seasons: list):
+    """
+    Function to actually save & update the game logs
+
+    :param seasons: _description_
+    """
+    for season in seasons:
+        dir = f"/workspaces/Oracle/data/seasonal_data/20{season[-2:]}"
+
+        for team_abb in nba_teams_info["abbreviation"]:
+            defense_data_dir = f"{dir}/defensive_data"
+            team_logs_dir = f"{dir}/team_logs"
+            team_logs_path = os.path.join(team_logs_dir, f"{team_abb}.csv")
+            team_logs_data = pd.read_csv(team_logs_path, index_col=0)
+
+            pre_asb_data = []
+            post_asb_data = []
+            for filename in os.listdir(defense_data_dir):
+                defense_file_path = os.path.join(defense_data_dir, filename)
+                if os.path.isfile(defense_file_path):
+                    defense_data = pd.read_csv(defense_file_path, index_col=0)
+                if "pre" in filename:
+                    pre_asb_data.append(defense_data)
+                elif "post" in filename:
+                    post_asb_data.append(defense_data)
+                else:
+                    metrics = defense_data
+
+            complete_log = merge_defensive_stats(season, team_logs_data, pre_asb_data, post_asb_data, metrics)
+            complete_log.to_csv(f"{team_logs_path}")
+
+# merge_defensive_stats_to_game_logs(seasons)

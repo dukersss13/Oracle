@@ -28,13 +28,13 @@ class JsonType(Enum):
 
 @dataclass
 class GamePlan:
-    team_name: str = None
-    team_id: int = None
-    team_game_logs: pd.DataFrame = None
-    team_roster: pd.DataFrame = None
-    player_idx_lut: dict = None
-    active_players: pd.DataFrame = None
-    players_mins: dict = None
+    def __init__(self, team_name: str):
+        self.team_name: str = team_name
+        self.team_id: int = None
+        self.team_game_logs: pd.DataFrame = None
+        self.team_roster: pd.DataFrame = None
+        self.active_players: pd.DataFrame = None
+        self.players_mins: dict = None
 
 
 class LockerRoom:
@@ -68,17 +68,14 @@ class LockerRoom:
         home_lookup_values = ["nickname", self.home_team]
         away_lookup_values = ["nickname", self.away_team]
 
-        self.home_game_plan = GamePlan()
-        self.away_game_plan = GamePlan()
-
-        self.home_game_plan.team_name = self.home_team
-        self.away_game_plan.team_name = self.away_team
+        self.home_game_plan = GamePlan(self.home_team)
+        self.away_game_plan = GamePlan(self.away_team)
 
         self.home_game_plan.team_roster = self.fetch_roster(home_lookup_values)
         self.away_game_plan.team_roster = self.fetch_roster(away_lookup_values)
 
-        self.home_team_id = self.fetch_teams_id(home_lookup_values)
-        self.away_team_id = self.fetch_teams_id(away_lookup_values)
+        self.home_game_plan.team_id = self.fetch_teams_id(home_lookup_values)
+        self.away_game_plan.team_id = self.fetch_teams_id(away_lookup_values)
 
         self.home_away_dict = {self.home_team: Team.HOME, self.away_team: Team.AWAY}
 
@@ -157,9 +154,9 @@ class LockerRoom:
         """
         with open(self.active_players_path) as f:
             active_players_json = json.load(f)
-        
+
         for team in active_players_json:
-            team_data = self.home_game_plan if self.home_away_dict[team] == Team.HOME else self.away_game_plan
+            team_data = self.home_game_plan if team == self.home_team else self.away_game_plan
             active_players_df = pd.DataFrame(active_players_json[team], index=["Mins"]).T
             active_players = active_players_df[active_players_df["Mins"] != 0]
             team_data.active_players = team_data.team_roster[np.isin(team_data.team_roster["PLAYER"],
