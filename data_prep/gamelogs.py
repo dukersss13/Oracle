@@ -26,5 +26,3 @@ for season in seasons:
     for team_id in nba_teams_info["id"]:
         team_game_logs = fetch_team_game_logs(team_id, season)
         team_game_logs.to_csv(f"data/seasonal_data/20{season[-2:]}/team_logs/{team_game_logs['TEAM_ABBREVIATION'].values[0]}.csv")
-
-

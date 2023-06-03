@@ -7,6 +7,18 @@
 		"context": "..",
 		// Update the 'dockerFile' property if you aren't using the standard 'Dockerfile' filename.
 		"dockerfile": "../Dockerfile"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"njpwerner.autodocstring",
+				"ms-python.python",
+				"GrapeCity.gc-excelviewer",
+				"Gruntfuggly.todo-tree",
+				"eamodio.gitlens",
+				"phplasma.csv-to-table"
+			]
+		}
 	}
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
