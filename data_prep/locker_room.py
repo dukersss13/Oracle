@@ -59,9 +59,6 @@ class LockerRoom:
         self.num_seasons = nn_config["num_seasons"]
         self.nba_teams_info = pd.read_excel("data/static_data/static_team_info.csv")
 
-        # self.fetch_team_scouting_report(self.home_team, date_to=self.game_date)
-        # luka_id = self.fetch_players_id("Luka Doncic")
-        # luka_logs = self.get_filtered_players_logs(luka_id)
         self.fetch_teams_data()
 
     def fetch_teams_data(self):
