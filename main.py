@@ -1,10 +1,6 @@
 from neural_networks.oracle import Oracle
 
 
-
-
-
-
 predictors = ["FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA",
               "AST", "TOV", "PF", "MIN",
               "REST_DAYS", "HOME", "AWAY", "PTS"]
@@ -21,6 +17,6 @@ if __name__ == '__main__':
     oracle = Oracle(game_details=game_details, oracle_config=oracle_config, nn_config=nn_config)
     oracle.run()
 
-    # Take into account of opponents
-    # 1. For each current opponent, search for their defense statistics + look at players' performance against 3 closest's
-    # defensive teams for each category
+    # TODO
+    # Need to make function to merge opposing defense to player's game logs
+    # Adjust existing NN + add XGB tree
