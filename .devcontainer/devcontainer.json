@@ -16,7 +16,8 @@
 				"GrapeCity.gc-excelviewer",
 				"Gruntfuggly.todo-tree",
 				"eamodio.gitlens",
-				"phplasma.csv-to-table"
+				"phplasma.csv-to-table",
+				"ms-azuretools.vscode-docker"
 			]
 		}
 	}

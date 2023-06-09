@@ -1,10 +1,17 @@
-from keras import Sequential, regularizers, losses
-from keras.layers import Dense, Dropout
-from keras.optimizers import SGD, Adam
+from tensorflow.keras import Sequential, regularizers, losses
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.optimizers import SGD, Adam
 
 
 class SequentialNN:
+    """
+    _summary_
+    """
     def __init__(self, config: dict):
+        """_summary_
+
+        :param config: _description_
+        """
         self.input_shape = config["input_shape"]
         self.activation_func = config["activation_func"]
         self.output_shape = config["output_shape"]
@@ -24,6 +31,14 @@ class SequentialNN:
         return model
 
     def compile_model(self, learning_rate, loss_function, optimizer_function, metrics):
+        """_summary_
+
+        :param learning_rate: _description_
+        :param loss_function: _description_
+        :param optimizer_function: _description_
+        :param metrics: _description_
+        :return: _description_
+        """
         if loss_function == "MSE":
             loss_function = losses.MeanSquaredError()
         elif loss_function == "MAE":

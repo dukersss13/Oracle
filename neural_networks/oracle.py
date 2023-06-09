@@ -4,7 +4,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import pandas as pd
 
-from data_prep.locker_room import GamePlan, LockerRoom, Team
+from data_prep.locker_room import LockerRoom, Team
 from neural_networks.neural_networks import SequentialNN
 
 
@@ -66,25 +66,6 @@ class Oracle:
 
         return x_test
 
-    def prepare_matchup_statistics(self, off_player_name_and_id: Tuple,
-                                   matchups: dict, defensive_roster: np.ndarray) -> np.ndarray:
-        """_summary_
-
-        :param off_player_id: _description_
-        :param matchups: _description_
-        :param defensive_roster: _description_
-        :return: _description_
-        """
-        off_player_name, off_player_id = off_player_name_and_id
-        players_defensive_matchups = matchups[off_player_name]
-
-        for def_player_idx in players_defensive_matchups:
-            def_player_id = defensive_roster[def_player_idx]
-            matchup_data = self.locker_room.fetch_matchup_stats(off_player_id, def_player_id)
-
-        
-
-
     def get_players_forecast(self, players_full_name: str, filtered_players_logs: np.ndarray,
                              most_recent_game_date: pd.Timestamp, team: Team) -> int:
         """
@@ -125,8 +106,6 @@ class Oracle:
         for players_name, players_id in data.active_players.iterrows():
             print(f"\nFetching game logs for: {players_name}")
             filtered_players_logs, most_recent_game_date = self.locker_room.get_filtered_players_logs(players_id)
-            matchups_statistics = self.prepare_matchup_statistics((players_name, players_id), self.locker_room.home_game_plan.matchups,
-                                                                  self.locker_room.away_game_plan.team_roster)
 
             print(f"Starting forecast for: {players_name}")
             forecasted_points = self.get_players_forecast(players_name, filtered_players_logs, 

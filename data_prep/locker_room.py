@@ -10,7 +10,7 @@ from nba_api.stats.endpoints import (playergamelog, leagueseasonmatchups, boxsco
                                      commonteamroster, teamgamelogs, leaguedashptteamdefend)
 from nba_api.stats.library.parameters import SeasonAll
 from nba_api.stats.static import  players
-from keras.utils import to_categorical
+from tensorflow import one_hot
 from dataclasses import dataclass
 
 pd.set_option('mode.chained_assignment', None)
@@ -21,10 +21,8 @@ class Team(Enum):
     HOME = 0
     AWAY = 1
 
-
 class JsonType(Enum):
     ACTIVE_PLAYERS = 1
-
 
 @dataclass
 class GamePlan:
@@ -57,7 +55,7 @@ class LockerRoom:
         self.nn_config = nn_config
         self.predictors = nn_config["predictors"]
         self.num_seasons = nn_config["num_seasons"]
-        self.nba_teams_info = pd.read_excel("data/static_data/static_team_info.csv")
+        self.nba_teams_info = pd.read_csv("data/static_data/static_team_info.csv")
 
         self.fetch_teams_data()
 
@@ -94,13 +92,12 @@ class LockerRoom:
             self.set_active_players()
     
     @staticmethod
-    def pause_for_configurations(json_type: JsonType):
+    def pause_for_configurations():
         """
         Pauses the program so user can set the lineups
         """
-        if json_type == JsonType.ACTIVE_PLAYERS:
-            print("\nSet active players in active_players.json.")
-            print("Input 0 for injured/DNP. Else, leave as null")
+        print("\nSet active players in active_players.json.")
+        print("Input 0 for injured/DNP. Else, leave as null")
 
         good_to_go = input(("Enter 1 to continue: "))
 
@@ -185,12 +182,12 @@ class LockerRoom:
         with open(path, 'w') as f:
             json.dump(prereq_json, f, indent=1)
 
-    def check_requisite_jsons(self, json_path: str, json_type: JsonType):
+    def check_requisite_jsons(self, json_path: str):
         """
         Check if active players/matchus json exists. If not, create one.
         """
         if not os.path.exists(json_path):
-            prereq_json = self.init_rerequisite_jsons(json_type)
+            prereq_json = self.init_rerequisite_jsons()
             with open(json_path, 'w') as f:
                 json.dump(prereq_json, f, indent=1)
 
@@ -239,47 +236,29 @@ class LockerRoom:
 
         return filtered_log.values.astype(float), most_recent_game_date
 
-    def add_opponent_defensive_stats(self, players_logs: pd.DataFrame) -> pd.DataFrame:
-        """_summary_
+    # def fetch_team_scouting_report(self, team_abbreviation: str, game_date: pd.Timestamp):
+    #     """_summary_
 
-        :param players_logs: _description_
-        :return: _description_
-        """
-        opponents = players_logs["MATCHUP"].apply(lambda x: x.split(" ")[2])
-        game_dates = players_logs["GAME_DATE"]
+    #     :param team_name: _description_
+    #     :param date_to: _description_
+    #     :return: _description_
+    #     """
+    #     defensive_categories = ["Overall", "3 Pointers"]
+    #     team_id = self.fetch_teams_id(["abbreviation", team_abbreviation])
+    #     defense_matrix = pd.DataFrame({"TEAM_ID": [team_id]})
 
-        defensive_logs = []
-        for opp, game_date in zip(opponents, game_dates):
-            defensive_matrix = self.fetch_team_scouting_report(opp, game_date)
-            defensive_logs.append(defensive_matrix)
-        
-        defensive_logs = pd.concat(defensive_logs, axis=0)
+    #     for defensive_category in defensive_categories:
+    #         defense_category_matrix = leaguedashptteamdefend.LeagueDashPtTeamDefend(defense_category=defensive_category,
+    #                                                                                 per_mode_simple="PerGame",
+    #                                                                                 season_type_all_star="Regular Season",
+    #                                                                                 team_id_nullable=team_id,
+    #                                                                                 date_to_nullable=game_date).get_data_frames()[0]
 
-        return pd.concat([players_logs, defensive_logs], axis=1)
+    #         defense_matrix = defense_matrix.merge(defense_category_matrix, how="inner", on=["TEAM_ID"])
 
-    def fetch_team_scouting_report(self, team_abbreviation: str, game_date: pd.Timestamp):
-        """_summary_
+    #     cols_to_keep = ["TEAM_ID", "D_FGM", "D_FGA", "D_FG_PCT", "FG3M", "FG3A", "FG3_PCT"]
 
-        :param team_name: _description_
-        :param date_to: _description_
-        :return: _description_
-        """
-        defensive_categories = ["Overall", "3 Pointers"]
-        team_id = self.fetch_teams_id(["abbreviation", team_abbreviation])
-        defense_matrix = pd.DataFrame({"TEAM_ID": [team_id]})
-
-        for defensive_category in defensive_categories:
-            defense_category_matrix = leaguedashptteamdefend.LeagueDashPtTeamDefend(defense_category=defensive_category,
-                                                                                    per_mode_simple="PerGame",
-                                                                                    season_type_all_star="Regular Season",
-                                                                                    team_id_nullable=team_id,
-                                                                                    date_to_nullable=game_date).get_data_frames()[0]
-
-            defense_matrix = defense_matrix.merge(defense_category_matrix, how="inner", on=["TEAM_ID"])
-
-        cols_to_keep = ["TEAM_ID", "D_FGM", "D_FGA", "D_FG_PCT", "FG3M", "FG3A", "FG3_PCT"]
-
-        return defense_matrix[cols_to_keep]
+    #     return defense_matrix[cols_to_keep]
 
     def add_rest_days(self, players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -293,8 +272,15 @@ class LockerRoom:
         players_game_logs_df["REST_DAYS"] = players_game_logs_df["GAME_DATE"].diff(periods=-1)
         players_game_logs_df = players_game_logs_df.iloc[:-1, :]
         players_game_logs_df.loc[:, "REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
+        players_game_logs_df["TEAM_ID"] = players_game_logs_df["MATCHUP"].apply(self.get_opp_id)
 
         return players_game_logs_df[players_game_logs_df["GAME_DATE"] < self.game_date]
+
+    def merge_defensive_stats_to_players_log(self):
+        """_summary_
+
+        :return: _description_
+        """
 
     @staticmethod
     def add_home_away_columns(players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
@@ -304,7 +290,7 @@ class LockerRoom:
         :param players_game_logs_df: player's game logs df
         :return: player's game logs df w/ home & away columns
         """
-        players_game_logs_df.loc[:, ("HOME", "AWAY")] = to_categorical(players_game_logs_df["MATCHUP"].\
+        players_game_logs_df.loc[:, ("HOME", "AWAY")] = one_hot(players_game_logs_df["MATCHUP"].\
                                                         apply(LockerRoom.detect_home_or_away_games), 2)
 
         return players_game_logs_df
@@ -325,6 +311,16 @@ class LockerRoom:
         date = pd.Timestamp(f"{date_string[2]}-{months_dict[date_string[0]]}-{date_string[1][:-1]}")
 
         return date
+
+    def get_opp_id(self, matchup: str):
+        """
+        Fetch opponent's ID when looking at the matchup
+        """
+        matchup_split = matchup.split(" ")
+        opp_abb = matchup_split[2]
+        team_id = self.nba_teams_info[self.nba_teams_info["abbreviation"]==opp_abb]["id"].values[0]
+        
+        return team_id
 
     @staticmethod
     def filter_stats(game_logs_df: pd.DataFrame, columns_wanted: list) -> pd.DataFrame:
