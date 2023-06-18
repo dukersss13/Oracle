@@ -48,10 +48,13 @@ class LockerRoom:
         :param nn_config: _description_, defaults to None
         :param season: _description_, defaults to "2022-23"
         """
+        self.seasons = ["2022-23", "2021-22", "2020-21"]
+        self.current_season = season
+
         self.home_team = game_details["home_team"]
         self.away_team = game_details["away_team"]
         self.game_date = game_details["game_date"]
-        self.season = season
+
         self.nn_config = nn_config
         self.predictors = nn_config["predictors"]
         self.num_seasons = nn_config["num_seasons"]
@@ -127,7 +130,7 @@ class LockerRoom:
 
         team_id = self.fetch_teams_id(team_lookup_tuple)
         team_roster = commonteamroster.CommonTeamRoster(team_id=team_id,
-                                                        season=self.season).get_data_frames()[0][["PLAYER", "PLAYER_ID"]]
+                                                        season=self.current_season).get_data_frames()[0][["PLAYER", "PLAYER_ID"]]
         
         return team_roster
 
@@ -203,23 +206,17 @@ class LockerRoom:
         
         return json
 
-    def fetch_players_game_logs_df(self, players_id: str) -> pd.DataFrame:
+    def fetch_players_game_logs_df(self, players_id: str, season: str) -> pd.DataFrame:
         """
         Access the PlayerGameLog module to fetch the game logs df of given player
 
         :param players_id: player ID
         :return: the given player's game logs in df format
         """
-        num_games = int(82 * self.num_seasons)
-        players_game_log = playergamelog.PlayerGameLog(player_id=players_id, season=SeasonAll.all,
-                                                       season_type_all_star="Regular Season")
-        players_game_logs_df = players_game_log.get_data_frames()[0]
-        try:
-            players_game_logs_df =  players_game_logs_df.iloc[:num_games+1, :]
-        except:
-            players_game_logs_df = players_game_logs_df
+        players_game_log = playergamelog.PlayerGameLog(player_id=players_id, season=season,
+                                                       season_type_all_star="Regular Season").get_data_frames()[0]
 
-        return players_game_logs_df
+        return players_game_log
 
     def get_filtered_players_logs(self, players_id: int) -> Tuple[np.ndarray, pd.Timestamp]:
         """
@@ -228,39 +225,33 @@ class LockerRoom:
         :param players_full_name: full name of the player
         :return filtered_log.values: an array of player's game logs filtered by specific columns
         """
-        players_game_logs_df = self.fetch_players_game_logs_df(players_id)
-        players_game_logs_with_rest_df = self.add_rest_days(players_game_logs_df)
-        most_recent_game_date = self.get_most_recent_game_date(players_game_logs_df)
-        complete_players_game_logs = LockerRoom.add_home_away_columns(players_game_logs_with_rest_df)
-        filtered_log = LockerRoom.filter_stats(complete_players_game_logs, self.predictors)
+        # TODO iterate through seasons HERE
+        all_logs = pd.DataFrame([])
+        for season in self.seasons:
+            try:
+                players_game_logs_df = self.fetch_players_game_logs_df(players_id, season)
+                filtered_logs = self.add_predictors_to_players_log(players_game_logs_df, season)
+                all_logs = pd.concat([all_logs, filtered_logs])
+            except:
+                print(f"Logs for playerID: {players_id} for {season} cannot be fetched.")
 
-        return filtered_log.values.astype(float), most_recent_game_date
+        return all_logs
 
-    # def fetch_team_scouting_report(self, team_abbreviation: str, game_date: pd.Timestamp):
-    #     """_summary_
+    def add_predictors_to_players_log(self, players_game_logs_df: pd.DataFrame, season: str) -> pd.DataFrame:
+        """_summary_
 
-    #     :param team_name: _description_
-    #     :param date_to: _description_
-    #     :return: _description_
-    #     """
-    #     defensive_categories = ["Overall", "3 Pointers"]
-    #     team_id = self.fetch_teams_id(["abbreviation", team_abbreviation])
-    #     defense_matrix = pd.DataFrame({"TEAM_ID": [team_id]})
+        :param players_game_log: _description_
+        :return: _description_
+        """
+        players_log = self.add_rest_days_and_opp_id(players_game_logs_df)
+        #most_recent_game_date = self.get_most_recent_game_date(players_game_logs_df)
+        players_log = LockerRoom.add_home_away_columns(players_log)
+        complete_log = self.merge_defensive_stats_to_players_log(players_log, season)
+        filtered_log = LockerRoom.filter_stats(complete_log, self.predictors)
 
-    #     for defensive_category in defensive_categories:
-    #         defense_category_matrix = leaguedashptteamdefend.LeagueDashPtTeamDefend(defense_category=defensive_category,
-    #                                                                                 per_mode_simple="PerGame",
-    #                                                                                 season_type_all_star="Regular Season",
-    #                                                                                 team_id_nullable=team_id,
-    #                                                                                 date_to_nullable=game_date).get_data_frames()[0]
+        return filtered_log
 
-    #         defense_matrix = defense_matrix.merge(defense_category_matrix, how="inner", on=["TEAM_ID"])
-
-    #     cols_to_keep = ["TEAM_ID", "D_FGM", "D_FGA", "D_FG_PCT", "FG3M", "FG3A", "FG3_PCT"]
-
-    #     return defense_matrix[cols_to_keep]
-
-    def add_rest_days(self, players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
+    def add_rest_days_and_opp_id(self, players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
         """
         Add rest days column
 
@@ -274,13 +265,26 @@ class LockerRoom:
         players_game_logs_df.loc[:, "REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
         players_game_logs_df["TEAM_ID"] = players_game_logs_df["MATCHUP"].apply(self.get_opp_id)
 
-        return players_game_logs_df[players_game_logs_df["GAME_DATE"] < self.game_date]
+        return players_game_logs_df
 
-    def merge_defensive_stats_to_players_log(self):
+    def merge_defensive_stats_to_players_log(self, players_game_log: pd.DataFrame, season: str):
         """_summary_
 
+        :param players_game_log: _description_
+        :param season: _description_
         :return: _description_
         """
+        year = f"20{season[-2:]}"
+        all_star_date = f"{year}-02-14"
+        defensive_data_path = f"data/seasonal_data/{year}/defensive_data/"
+
+        for filename in os.listdir(defensive_data_path):
+            data_path = os.path.join(defensive_data_path, f"{filename}")
+            defensive_data = pd.read_csv(data_path, index_col=0)
+
+            x = 3
+
+
 
     @staticmethod
     def add_home_away_columns(players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
@@ -379,7 +383,7 @@ class LockerRoom:
         col, name = team_name
         team_id = self.nba_teams_info[self.nba_teams_info[col]==name]["id"]
         team_game_logs = teamgamelogs.TeamGameLogs(team_id_nullable=team_id,
-                                                   season_nullable=self.season).get_data_frames()[0]
+                                                   season_nullable=self.current_season).get_data_frames()[0]
         team_game_logs["GAME_DATE"] = [pd.Timestamp(game_date) for game_date in team_game_logs["GAME_DATE"]]
 
         return team_game_logs
