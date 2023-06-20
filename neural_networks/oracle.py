@@ -24,8 +24,8 @@ class Oracle:
         self.locker_room = LockerRoom(game_details, nn_config)
         self.set_oracle_config(oracle_config)
          
-        if nn_config["holdout"]:
-            self.box_score = self.locker_room.fetch_game_box_score(self.game_date)
+        # if nn_config["holdout"]:
+        #     self.box_score = self.locker_room.fetch_game_box_score(self.game_date)
 
     def set_oracle_config(self, oracle_config: dict):
         """
@@ -105,11 +105,10 @@ class Oracle:
         print(f"\nStarting forecast for the {data.team_name}")
         for players_name, players_id in data.active_players.iterrows():
             print(f"\nFetching game logs for: {players_name}")
-            filtered_players_logs, most_recent_game_date = self.locker_room.get_filtered_players_logs(players_id)
+            filtered_players_logs = self.locker_room.get_filtered_players_logs(players_id, team)
 
             print(f"Starting forecast for: {players_name}")
-            forecasted_points = self.get_players_forecast(players_name, filtered_players_logs, 
-                                                          most_recent_game_date, team)
+            forecasted_points = self.get_players_forecast(players_name, filtered_players_logs, team)
             forecast_dict = Oracle.append_to_forecast_dict(forecast_dict, players_name, forecasted_points)
             players_done += 1
 

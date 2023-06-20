@@ -56,8 +56,7 @@ class LockerRoom:
         self.game_date = game_details["game_date"]
 
         self.nn_config = nn_config
-        self.predictors = nn_config["predictors"]
-        self.num_seasons = nn_config["num_seasons"]
+        self.predictors_plus_label = nn_config["columns"]
         self.nba_teams_info = pd.read_csv("data/static_data/static_team_info.csv")
 
         self.fetch_teams_data()
@@ -82,8 +81,8 @@ class LockerRoom:
 
         self.set_game_plan()
 
-        if self.nn_config["holdout"]:
-            self.home_game_plan.team_game_logs = self.fetch_team_game_logs(home_lookup_values)
+        self.home_game_plan.team_game_logs = self.fetch_team_game_logs(home_lookup_values)
+        self.away_game_plan.team_game_logs = self.fetch_team_game_logs(away_lookup_values)
 
     def set_game_plan(self):
         """
@@ -92,7 +91,7 @@ class LockerRoom:
         self.update_game_plan()
         set_active_players = LockerRoom.pause_for_configurations()
         if set_active_players:
-            self.set_active_players()
+            self.set_active_players()           
     
     @staticmethod
     def pause_for_configurations():
@@ -218,7 +217,7 @@ class LockerRoom:
 
         return players_game_log
 
-    def get_filtered_players_logs(self, players_id: int) -> Tuple[np.ndarray, pd.Timestamp]:
+    def get_filtered_players_logs(self, players_id: int, team: Team) -> Tuple[np.ndarray, pd.Timestamp]:
         """
         Retrieve the filtered game logs for given player
 
@@ -230,24 +229,26 @@ class LockerRoom:
         for season in self.seasons:
             try:
                 players_game_logs_df = self.fetch_players_game_logs_df(players_id, season)
-                filtered_logs = self.add_predictors_to_players_log(players_game_logs_df, season)
-                all_logs = pd.concat([all_logs, filtered_logs])
+                all_logs = pd.concat([all_logs, players_game_logs_df])
             except:
                 print(f"Logs for playerID: {players_id} for {season} cannot be fetched.")
 
-        return all_logs
+        if not all_logs.empty:
+            filtered_logs = self.add_predictors_to_players_log(all_logs, team)
 
-    def add_predictors_to_players_log(self, players_game_logs_df: pd.DataFrame, season: str) -> pd.DataFrame:
+        return filtered_logs
+
+    def add_predictors_to_players_log(self, players_game_logs_df: pd.DataFrame, team: Team) -> pd.DataFrame:
         """_summary_
 
         :param players_game_log: _description_
         :return: _description_
         """
         players_log = self.add_rest_days_and_opp_id(players_game_logs_df)
-        #most_recent_game_date = self.get_most_recent_game_date(players_game_logs_df)
+        # most_recent_game_date = self.get_most_recent_game_date(players_game_logs_df)
         players_log = LockerRoom.add_home_away_columns(players_log)
-        complete_log = self.merge_defensive_stats_to_players_log(players_log, season)
-        filtered_log = LockerRoom.filter_stats(complete_log, self.predictors)
+        complete_log = self.merge_defensive_stats_to_players_log(players_log, team)
+        filtered_log = LockerRoom.filter_stats(complete_log, self.predictors_plus_label)
 
         return filtered_log
 
@@ -267,24 +268,23 @@ class LockerRoom:
 
         return players_game_logs_df
 
-    def merge_defensive_stats_to_players_log(self, players_game_log: pd.DataFrame, season: str):
+    def merge_defensive_stats_to_players_log(self, players_game_log: pd.DataFrame, team: Team):
         """_summary_
 
         :param players_game_log: _description_
         :param season: _description_
         :return: _description_
         """
-        year = f"20{season[-2:]}"
-        all_star_date = f"{year}-02-14"
-        defensive_data_path = f"data/seasonal_data/{year}/defensive_data/"
+        if team == Team.HOME:
+            team_game_logs = self.home_game_plan.team_game_logs
+        elif team == Team.AWAY:
+            team_game_logs = self.away_game_plan.team_game_logs
 
-        for filename in os.listdir(defensive_data_path):
-            data_path = os.path.join(defensive_data_path, f"{filename}")
-            defensive_data = pd.read_csv(data_path, index_col=0)
+        players_game_log = players_game_log.rename(columns={"Game_ID": "GAME_ID"})
+        players_game_log["GAME_ID"] = players_game_log["GAME_ID"].astype(np.int64)
+        log_with_defensive_stats = players_game_log.merge(team_game_logs, how="left", on=["GAME_ID", "TEAM_ID"])
 
-            x = 3
-
-
+        return log_with_defensive_stats
 
     @staticmethod
     def add_home_away_columns(players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
@@ -373,7 +373,7 @@ class LockerRoom:
         
         return int(teams_id)
 
-    def fetch_team_game_logs(self, team_name: str):
+    def fetch_team_game_logs(self, team_name: str) -> pd.DataFrame:
         """
         Fetch all the game logs for given team
 
@@ -381,12 +381,17 @@ class LockerRoom:
         :return: the team's game logs
         """
         col, name = team_name
-        team_id = self.nba_teams_info[self.nba_teams_info[col]==name]["id"]
-        team_game_logs = teamgamelogs.TeamGameLogs(team_id_nullable=team_id,
-                                                   season_nullable=self.current_season).get_data_frames()[0]
-        team_game_logs["GAME_DATE"] = [pd.Timestamp(game_date) for game_date in team_game_logs["GAME_DATE"]]
+        team_abbreviation = self.nba_teams_info[self.nba_teams_info[col]==name]["abbreviation"].values[0]
+        path = "data/seasonal_data"
+        game_logs_by_year = []
 
-        return team_game_logs
+        for season in self.seasons:
+            season_year = f"20{season[-2:]}"
+            game_log = pd.read_csv(f"{path}/{season_year}/team_logs/{team_abbreviation}.csv", index_col=0)
+            game_logs_by_year.append(game_log)
+
+        # Filter out the wanted columns
+        return pd.concat(game_logs_by_year, axis=0)
 
     def fetch_game_box_score(self, game_date: str) -> pd.DataFrame:
         """_summary_

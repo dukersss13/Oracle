@@ -1,10 +1,10 @@
 import os
 import pandas as pd
 
-from nba_api.stats.endpoints import leaguedashptteamdefend, teamgamelogs
+from nba_api.stats.endpoints import teamgamelogs
 
 
-nba_teams_info = pd.read_csv("data/static_data/static_team_info.csv")
+nba_teams_info = pd.read_csv("data/static_data/static_team_info.csv", index_col=0)
 seasons = ["2020-21", "2021-22", "2022-23"]
 
 
@@ -30,6 +30,7 @@ def save_teams_logs_per_season(seasons: list):
     for season in seasons:
         for team_id in nba_teams_info["id"]:
             team_game_logs = fetch_team_game_logs(team_id, season)
+            team_game_logs = team_game_logs[["SEASON_YEAR", "TEAM_ABBREVIATION", "TEAM_NAME", "GAME_ID", "GAME_DATE", "MATCHUP"]]
             team_game_logs.to_csv(f"data/seasonal_data/20{season[-2:]}/team_logs/{team_game_logs['TEAM_ABBREVIATION'].values[0]}.csv")
 
 def get_opp_id(matchup: str):
@@ -60,8 +61,7 @@ def merge_defensive_stats(season: str, game_log: pd.DataFrame, pre_asb_stats: li
 
     :return: a complete game log with all stats merged as new columns
     """
-    all_star_date = f"20{season}-02-14"
-    game_log = game_log[["SEASON_YEAR", "TEAM_ABBREVIATION", "TEAM_NAME", "GAME_ID", "GAME_DATE", "MATCHUP"]]
+    all_star_date = f"20{season[-2:]}-02-14"
     game_log["TEAM_ID"] = game_log["MATCHUP"].apply(get_opp_id)
     
     pre_asb = game_log.copy()
@@ -109,5 +109,5 @@ def merge_defensive_stats_to_game_logs(seasons: list):
             complete_log = merge_defensive_stats(season, team_logs_data, pre_asb_data, post_asb_data, metrics)
             complete_log.to_csv(f"{team_logs_path}")
 
-save_teams_logs_per_season(seasons)
-merge_defensive_stats_to_game_logs(seasons)
+# save_teams_logs_per_season(seasons)
+# merge_defensive_stats_to_game_logs(seasons)
