@@ -59,9 +59,9 @@ class LockerRoom:
         self.predictors_plus_label = nn_config["columns"]
         self.nba_teams_info = pd.read_csv("data/static_data/static_team_info.csv")
 
-        self.fetch_teams_data()
+        self._fetch_teams_data()
 
-    def fetch_teams_data(self):
+    def _fetch_teams_data(self):
         """
         Fetch the data needed for each team & create/update active players json
         """
@@ -79,22 +79,30 @@ class LockerRoom:
 
         self.home_away_dict = {self.home_team: Team.HOME, self.away_team: Team.AWAY}
 
-        self.set_game_plan()
+        self._set_game_plan()
+        self._fetch_all_logs()
 
-        self.home_game_plan.team_game_logs = self.fetch_team_game_logs(home_lookup_values)
-        self.away_game_plan.team_game_logs = self.fetch_team_game_logs(away_lookup_values)
+        # self.home_game_plan.team_game_logs = self.fetch_team_game_logs(home_lookup_values)
+        # self.away_game_plan.team_game_logs = self.fetch_team_game_logs(away_lookup_values)
 
-    def set_game_plan(self):
+    def _set_game_plan(self):
         """
         Set the game plan such as active players & matchups
         """
-        self.update_game_plan()
-        set_active_players = LockerRoom.pause_for_configurations()
+        self._update_game_plan()
+        set_active_players = LockerRoom._pause_for_configurations()
         if set_active_players:
             self.set_active_players()           
     
+    def _fetch_all_logs(self):
+        """_summary_
+
+        :return: _description_
+        """
+        self.all_logs = pd.read_csv("data/all_logs.csv", index_col=0)
+
     @staticmethod
-    def pause_for_configurations():
+    def _pause_for_configurations():
         """
         Pauses the program so user can set the lineups
         """
@@ -106,7 +114,7 @@ class LockerRoom:
         return good_to_go
 
     @staticmethod
-    def init_months_dict() -> dict:
+    def _init_months_dict() -> dict:
         """
         Create months dictionary
         """
@@ -140,10 +148,7 @@ class LockerRoom:
         :param players_game_logs_df: player's game logs df
         :return: the date of their most recent game
         """
-        if self.nn_config["holdout"]:
-            most_recent_game_date = players_game_logs_df[players_game_logs_df["GAME_DATE"] < self.game_date]["GAME_DATE"].values[0]
-        else:
-            most_recent_game_date = players_game_logs_df["GAME_DATE"][0]
+        most_recent_game_date = players_game_logs_df["GAME_DATE_x"].values[0]
 
         return most_recent_game_date
 
@@ -162,7 +167,7 @@ class LockerRoom:
                                                              active_players.index)].set_index("PLAYER")
             team_data.players_mins = active_players.to_dict()["Mins"]
 
-    def update_game_plan(self):
+    def _update_game_plan(self):
         """
         Update the active players json to set active players or manually assign minutes
 
@@ -172,7 +177,7 @@ class LockerRoom:
 
         path = self.active_players_path
 
-        self.check_requisite_jsons(path)
+        self._check_requisite_jsons(path)
         with open(path) as f:
             prereq_json = json.load(f)
 
@@ -180,20 +185,20 @@ class LockerRoom:
         for team_name in prereq_json:
             del team_name
 
-        prereq_json = self.init_rerequisite_jsons()
+        prereq_json = self._init_rerequisite_jsons()
         with open(path, 'w') as f:
             json.dump(prereq_json, f, indent=1)
 
-    def check_requisite_jsons(self, json_path: str):
+    def _check_requisite_jsons(self, json_path: str):
         """
         Check if active players/matchus json exists. If not, create one.
         """
         if not os.path.exists(json_path):
-            prereq_json = self.init_rerequisite_jsons()
+            prereq_json = self._init_rerequisite_jsons()
             with open(json_path, 'w') as f:
                 json.dump(prereq_json, f, indent=1)
 
-    def init_rerequisite_jsons(self):
+    def _init_rerequisite_jsons(self):
         """
         Initialize the active players json
         """
@@ -224,7 +229,6 @@ class LockerRoom:
         :param players_full_name: full name of the player
         :return filtered_log.values: an array of player's game logs filtered by specific columns
         """
-        # TODO iterate through seasons HERE
         all_logs = pd.DataFrame([])
         for season in self.seasons:
             try:
@@ -234,25 +238,25 @@ class LockerRoom:
                 print(f"Logs for playerID: {players_id} for {season} cannot be fetched.")
 
         if not all_logs.empty:
-            filtered_logs = self.add_predictors_to_players_log(all_logs, team)
+            filtered_logs = self._add_predictors_to_players_log(all_logs, team)
 
         return filtered_logs
 
-    def add_predictors_to_players_log(self, players_game_logs_df: pd.DataFrame, team: Team) -> pd.DataFrame:
+    def _add_predictors_to_players_log(self, players_game_logs_df: pd.DataFrame, team: Team) -> pd.DataFrame:
         """_summary_
 
         :param players_game_log: _description_
         :return: _description_
         """
-        players_log = self.add_rest_days_and_opp_id(players_game_logs_df)
+        players_log = self._add_rest_days_and_opp_id(players_game_logs_df)
         # most_recent_game_date = self.get_most_recent_game_date(players_game_logs_df)
-        players_log = LockerRoom.add_home_away_columns(players_log)
-        complete_log = self.merge_defensive_stats_to_players_log(players_log, team)
+        players_log = LockerRoom._add_home_away_columns(players_log)
+        complete_log = self._merge_defensive_stats_to_players_log(players_log, team)
         filtered_log = LockerRoom.filter_stats(complete_log, self.predictors_plus_label)
 
         return filtered_log
 
-    def add_rest_days_and_opp_id(self, players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
+    def _add_rest_days_and_opp_id(self, players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
         """
         Add rest days column
 
@@ -270,26 +274,21 @@ class LockerRoom:
 
         return players_game_logs_df
 
-    def merge_defensive_stats_to_players_log(self, players_game_log: pd.DataFrame, team: Team):
+    def _merge_defensive_stats_to_players_log(self, players_game_log: pd.DataFrame, team: Team):
         """_summary_
 
         :param players_game_log: _description_
         :param season: _description_
         :return: _description_
         """
-        if team == Team.HOME:
-            team_game_logs = self.home_game_plan.team_game_logs
-        elif team == Team.AWAY:
-            team_game_logs = self.away_game_plan.team_game_logs
-
         players_game_log = players_game_log.rename(columns={"Game_ID": "GAME_ID"})
         players_game_log["GAME_ID"] = players_game_log["GAME_ID"].astype(np.int64)
-        log_with_defensive_stats = players_game_log.merge(team_game_logs, how="left", on=["GAME_ID", "TEAM_ID"])
+        log_with_defensive_stats = players_game_log.merge(self.all_logs, how="left", on=["GAME_ID", "TEAM_ID"])
 
         return log_with_defensive_stats
 
     @staticmethod
-    def add_home_away_columns(players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
+    def _add_home_away_columns(players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
         """
         Add one_hot encoding home or away bool columns
         
@@ -313,7 +312,7 @@ class LockerRoom:
         """
         Convert a date in string format to pd.Timestamp format
         """
-        months_dict = LockerRoom.init_months_dict()
+        months_dict = LockerRoom._init_months_dict()
         date = pd.Timestamp(f"{date_string[2]}-{months_dict[date_string[0]]}-{date_string[1][:-1]}")
 
         return date

@@ -22,5 +22,4 @@ if __name__ == '__main__':
     oracle.run()
 
     # TODO
-    # Need to make function to merge opposing defense to player's game logs
     # Adjust existing NN + add XGB tree

@@ -77,7 +77,6 @@ def merge_defensive_stats(season: str, game_log: pd.DataFrame, pre_asb_stats: li
 
     return complete_log
 
-
 def merge_defensive_stats_to_game_logs(seasons: list):
     """
     Function to actually save & update the game logs
@@ -108,6 +107,20 @@ def merge_defensive_stats_to_game_logs(seasons: list):
 
             complete_log = merge_defensive_stats(season, team_logs_data, pre_asb_data, post_asb_data, metrics)
             complete_log.to_csv(f"{team_logs_path}")
+
+# def concat_all_logs(seasons: list):
+#     """_summary_
+
+#     :param seasons: _description_
+#     """
+#     team_logs = []
+#     for season in seasons:
+#         dir = f"data/seasonal_data/20{season[-2:]}/team_logs"
+#         team_file = pd.read_csv(f"{dir}/all_logs.csv", index_col=0)
+#         team_logs.append(team_file)
+    
+#     all_logs = pd.concat(team_logs, axis=0)
+#     all_logs.to_csv(f"data/all_logs.csv")
 
 # save_teams_logs_per_season(seasons)
 # merge_defensive_stats_to_game_logs(seasons)
