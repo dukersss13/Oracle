@@ -1,7 +1,7 @@
 from neural_networks.oracle import Oracle
 
 
-columns = ["MIN", "FGA", "FG3A_x", "FTA", "HOME", "AWAY", "REST_DAYS",
+columns = ["MIN", "GAME_DATE_x", "FGA", "FG3A_x", "FTA", "HOME", "AWAY", "REST_DAYS",
            "D_FGM", "D_FGA", "D_FG_PCT", "PCT_PLUSMINUS",
            "FG3M_y", "FG3A_y", "FG3_PCT_y", "NS_FG3_PCT", "PLUSMINUS_x",
            "FG2M", "FG2A", "FG2_PCT", "NS_FG2_PCT", "PLUSMINUS_y",
@@ -9,7 +9,7 @@ columns = ["MIN", "FGA", "FG3A_x", "FTA", "HOME", "AWAY", "REST_DAYS",
            "FG2M", "FG2A", "FG2_PCT", "NS_FG2_PCT",
            "E_PACE", "E_DEF_RATING", "PTS"]
 
-game_details = {"home_team": "Celtics", "away_team": "Mavericks", "game_date": "1-5-2023"}
+game_details = {"home_team": "Heat", "away_team": "Mavericks", "game_date": "4-1-2023"}
 oracle_config = {"save_file": True, "output_path": "output"}
 
 nn_config = {"columns": columns, "holdout": True, "MA_degree": 8,

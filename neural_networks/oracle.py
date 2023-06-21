@@ -43,9 +43,10 @@ class Oracle:
         :param player_game_logs: game logs of individual player
         :return: training predictors & outputs
         """
-        x_train, y_train = player_game_logs[:, :-1], player_game_logs[:, -1]
+        x_train, y_train = player_game_logs.iloc[:, :-1], player_game_logs.iloc[:, -1]
+        most_recent_game_date = player_game_logs["GAME_DATE"].values[0]
 
-        return x_train, y_train
+        return x_train, y_train, most_recent_game_date
 
     def prepare_testing_data(self, player_game_logs: np.ndarray, most_recent_game_date: pd.Timestamp, team: Team) -> np.ndarray:
         """
@@ -66,8 +67,7 @@ class Oracle:
 
         return x_test
 
-    def get_players_forecast(self, players_full_name: str, filtered_players_logs: np.ndarray,
-                             most_recent_game_date: pd.Timestamp, team: Team) -> int:
+    def get_players_forecast(self, players_full_name: str, filtered_players_logs: np.ndarray, team: Team) -> int:
         """
         """
         if filtered_players_logs.shape[0] < 15:
@@ -75,7 +75,7 @@ class Oracle:
             print(f"WARNING: Cannot run forecast for {players_full_name}. Will use player's average as forecast")
             return int(np.mean(filtered_players_logs[:, -1]))
 
-        x_train, y_train = self.prepare_training_data(filtered_players_logs)
+        x_train, y_train, most_recent_game_date = self.prepare_training_data(filtered_players_logs)
         x_test = self.prepare_testing_data(filtered_players_logs, most_recent_game_date, team)
         x_test = self.assign_player_mins(players_full_name, x_test, team)
 

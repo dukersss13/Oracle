@@ -217,7 +217,7 @@ class LockerRoom:
 
         return players_game_log
 
-    def get_filtered_players_logs(self, players_id: int, team: Team) -> Tuple[np.ndarray, pd.Timestamp]:
+    def get_filtered_players_logs(self, players_id: int, team: Team) -> pd.DataFrame:
         """
         Retrieve the filtered game logs for given player
 
@@ -261,6 +261,8 @@ class LockerRoom:
         """
         players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(lambda x: x.split(" "))
         players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(LockerRoom.convert_to_timestamp)
+
+        players_game_logs_df = players_game_logs_df[players_game_logs_df["GAME_DATE"] < self.game_date]
         players_game_logs_df["REST_DAYS"] = players_game_logs_df["GAME_DATE"].diff(periods=-1)
         players_game_logs_df = players_game_logs_df.iloc[:-1, :]
         players_game_logs_df.loc[:, "REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
