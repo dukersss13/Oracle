@@ -235,7 +235,7 @@ class LockerRoom:
                 players_game_logs_df = self.fetch_players_game_logs_df(players_id, season)
                 all_logs = pd.concat([all_logs, players_game_logs_df])
             except:
-                print(f"Logs for playerID: {players_id} for {season} cannot be fetched.")
+                print(f"Logs for playerID: {players_id.values[0]} for {season} cannot be fetched.")
 
         if not all_logs.empty:
             filtered_logs = self._add_predictors_to_players_log(all_logs, team)

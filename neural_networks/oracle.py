@@ -45,7 +45,7 @@ class Oracle:
         """
         x_train, y_train = player_game_logs.iloc[:, :-1].drop("GAME_DATE_x", axis=1), player_game_logs.iloc[:, -1]
 
-        return x_train.values, y_train.values
+        return x_train.values.astype(np.float64), y_train.values.astype(np.float64)
 
     def prepare_testing_data(self, player_game_logs: pd.DataFrame, most_recent_game_date: pd.Timestamp, team: Team) -> np.ndarray:
         """
@@ -63,7 +63,13 @@ class Oracle:
         # Take the MA for [MIN, FGA, FG3A_x, FTA]
         x_test_statistics = player_game_logs[["MIN", "FGA", "FG3A_x", "FTA"]].iloc[:ma_degree, :].mean().values
 
-        x_test = np.concatenate([x_test_statistics, [rest_days], home_or_away])
+        x_test_defense = player_game_logs[["D_FGM", "D_FGA", "D_FG_PCT", "PCT_PLUSMINUS",
+                                           "FG3M_y", "FG3A_y", "FG3_PCT_y", "NS_FG3_PCT", "PLUSMINUS_x",
+                                           "FG2M", "FG2A", "FG2_PCT", "NS_FG2_PCT", "PLUSMINUS_y",
+                                           "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT", "PLUSMINUS",
+                                           "E_PACE", "E_DEF_RATING"]].iloc[0, :].values
+
+        x_test = np.concatenate([x_test_statistics, [rest_days], home_or_away, x_test_defense])
 
         return x_test
 
@@ -81,6 +87,7 @@ class Oracle:
         x_test = self.assign_player_mins(players_full_name, x_test, team)
 
         players_trained_model = SequentialNN(self.nn_config)
+        print(f"Training for: {players_full_name}")
         _ = players_trained_model.model.fit(x_train, y_train, batch_size=32, epochs=self.nn_config["epochs"], 
                                             verbose=0, validation_split=self.nn_config["validation_split"],)
         forecasted_points = players_trained_model.model.predict(x_test.reshape(1, len(x_test)))[0][0]
