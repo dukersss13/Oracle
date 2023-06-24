@@ -8,13 +8,13 @@ columns = ["MIN", "GAME_DATE_x", "FGA", "FG3A_x", "FTA", "HOME", "AWAY", "REST_D
            "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT", "PLUSMINUS",
            "E_PACE", "E_DEF_RATING", "PTS"]
 
-game_details = {"home_team": "Heat", "away_team": "Mavericks", "game_date": "4-1-2023"}
+game_details = {"home_team": "Trail Blazers", "away_team": "Celtics", "game_date": "3-17-2023"}
 oracle_config = {"save_file": True, "output_path": "output"}
 
-nn_config = {"columns": columns, "holdout": True, "MA_degree": 8,
-             "input_shape": len(columns)-2, "output_shape": 1, "validation_split": .15,
-             "activation_func": "relu", "learning_rate": 2e-4, "output_activation_func": "relu",
-             "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 100}
+nn_config = {"columns": columns, "holdout": False, "MA_degree": 4,
+             "input_shape": len(columns)-2, "output_shape": 1, "validation_split": .10,
+             "activation_func": "relu", "learning_rate": 3e-4, "output_activation_func": "relu",
+             "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 500}
 
 if __name__ == '__main__':
     oracle = Oracle(game_details=game_details, oracle_config=oracle_config, nn_config=nn_config)

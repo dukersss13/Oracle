@@ -1,6 +1,10 @@
+from typing import Tuple
+
+import numpy as np
 from tensorflow.keras import Sequential, regularizers, losses
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import SGD, Adam
+from tensorflow.keras.callbacks import EarlyStopping
 
 
 class SequentialNN:
@@ -22,7 +26,7 @@ class SequentialNN:
     def create_neural_network(self):
         model = Sequential()
         model.add(Dense(200, activation=self.activation_func, input_shape=(self.input_shape, )))
-        model.add(Dense(200, activation=self.activation_func, batch_size=24, kernel_regularizer=regularizers.l1(2e-3))) # Jordan
+        model.add(Dense(200, activation=self.activation_func, batch_size=24, kernel_regularizer=regularizers.l1(1e-3))) # Jordan
         model.add(Dropout(0.20)) # Ray Allen
         model.add(Dense(200, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(1e-3))) # Nash
         model.add(Dropout(0.10))
@@ -53,3 +57,20 @@ class SequentialNN:
         model.compile(loss=loss_function, optimizer=optimizer_function, metrics=metrics)
 
         return model
+
+    def fit_model(self, training_set: Tuple[np.ndarray], batch_size: int, epochs: int, validation_split: int = 0.15,
+                  callback: EarlyStopping = None):
+        """_summary_
+
+        :param training_set: _description_
+        :param batch_size: _description_
+        :param epochs: _description_
+        :param callbacks: _description_
+        :param validation_split: _description_, defaults to 0.15
+        """
+        if callback is None:
+            callback = EarlyStopping(monitor="loss", min_delta=1e-6, patience=20)
+
+        x_train, y_train = training_set
+        self.model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs, callbacks=[callback],
+                       verbose=0, validation_split=validation_split)

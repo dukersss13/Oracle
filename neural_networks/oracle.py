@@ -79,17 +79,17 @@ class Oracle:
         if filtered_players_logs.shape[0] < 15:
             print(f"WARNING: {players_full_name} has only played {filtered_players_logs.shape[0]} games.")
             print(f"WARNING: Cannot run forecast for {players_full_name}. Will use player's average as forecast")
-            return int(np.mean(filtered_players_logs[:, -1]))
+            return int(filtered_players_logs.iloc[:, -1].mean())
 
         most_recent_game_date = self.locker_room.get_most_recent_game_date(filtered_players_logs)
-        x_train, y_train = self.prepare_training_data(filtered_players_logs)
+        training_data = self.prepare_training_data(filtered_players_logs)
         x_test = self.prepare_testing_data(filtered_players_logs, most_recent_game_date, team)
         x_test = self.assign_player_mins(players_full_name, x_test, team)
 
         players_trained_model = SequentialNN(self.nn_config)
         print(f"Training for: {players_full_name}")
-        _ = players_trained_model.model.fit(x_train, y_train, batch_size=32, epochs=self.nn_config["epochs"], 
-                                            verbose=0, validation_split=self.nn_config["validation_split"],)
+        players_trained_model.fit_model(training_data, batch_size=24, epochs=self.nn_config["epochs"], 
+                                        validation_split=self.nn_config["validation_split"])
         forecasted_points = players_trained_model.model.predict(x_test.reshape(1, len(x_test)))[0][0]
 
         return int(forecasted_points)
@@ -207,6 +207,6 @@ class Oracle:
         home_team_forecast_df = self.get_team_forecast(Team.HOME)
         away_team_forecast_df = self.get_team_forecast(Team.AWAY)
         
-        # if self.save_output:
-        #     print("Saving output files")
-        #     self.save_forecasts(home_team_forecast_df, away_team_forecast_df)
+        if self.save_output:
+            print("Saving output files")
+            self.save_forecasts(home_team_forecast_df, away_team_forecast_df)

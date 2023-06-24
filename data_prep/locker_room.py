@@ -100,6 +100,7 @@ class LockerRoom:
         :return: _description_
         """
         self.all_logs = pd.read_csv("data/all_logs.csv", index_col=0)
+        self.all_logs["GAME_DATE"] = pd.to_datetime(self.all_logs["GAME_DATE"])
 
     @staticmethod
     def _pause_for_configurations():
@@ -402,8 +403,7 @@ class LockerRoom:
         :return: _description_
         """
         game_date = pd.Timestamp(game_date)
-        team_game_logs = self.home_game_plan.team_game_logs
-        game_id = team_game_logs[team_game_logs["GAME_DATE"] == game_date]["GAME_ID"].values[0]
+        game_id = self.all_logs[self.all_logs["GAME_DATE"] == game_date]["GAME_ID"].values[0]
         box_score = boxscoretraditionalv2.BoxScoreTraditionalV2(game_id=game_id).get_data_frames()[0]
 
         return box_score
