@@ -26,10 +26,10 @@ class SequentialNN:
     def create_neural_network(self):
         model = Sequential()
         model.add(Dense(200, activation=self.activation_func, input_shape=(self.input_shape, )))
-        model.add(Dense(200, activation=self.activation_func, batch_size=24, kernel_regularizer=regularizers.l1(1e-3))) # Jordan
+        model.add(Dense(230, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(2e-3))) # Jordan
         model.add(Dropout(0.20)) # Ray Allen
-        model.add(Dense(200, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(1e-3))) # Nash
-        model.add(Dropout(0.10))
+        model.add(Dense(130, activation=self.activation_func, batch_size=24, kernel_regularizer=regularizers.l1(1e-3))) # Nash
+        model.add(Dropout(0.15))
         model.add(Dense(self.output_shape, activation=self.output_activation_func))
 
         return model
@@ -58,7 +58,7 @@ class SequentialNN:
 
         return model
 
-    def fit_model(self, training_set: Tuple[np.ndarray], batch_size: int, epochs: int, validation_split: int = 0.15,
+    def fit_model(self, training_set: Tuple[np.ndarray], batch_size: int, epochs: int, validation_split: int = 0.10,
                   callback: EarlyStopping = None):
         """_summary_
 

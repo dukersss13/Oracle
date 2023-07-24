@@ -1,7 +1,8 @@
 numpy
 xgboost
-# sklearn 
-pandas 
+scikit-learn 
+pandas
+openpyxl
 # matplotlib
 nba_api
 tensorflow

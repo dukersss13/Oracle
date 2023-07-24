@@ -403,7 +403,9 @@ class LockerRoom:
         :return: _description_
         """
         game_date = pd.Timestamp(game_date)
-        game_id = self.all_logs[self.all_logs["GAME_DATE"] == game_date]["GAME_ID"].values[0]
+        game_id = self.all_logs[(self.all_logs["GAME_DATE"] == game_date) & \
+                                (self.all_logs["TEAM_ABBREVIATION_x"] == self.nba_teams_info[self.nba_teams_info["nickname"] ==\
+                                 self.home_team]["abbreviation"].values[0])]["GAME_ID"].values[0]
         box_score = boxscoretraditionalv2.BoxScoreTraditionalV2(game_id=game_id).get_data_frames()[0]
 
         return box_score

@@ -1,11 +1,20 @@
-from ast import Tuple
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import pandas as pd
+from enum import Enum
 
 from data_prep.locker_room import LockerRoom, Team
-from neural_networks.neural_networks import SequentialNN
+from models.neural_networks import SequentialNN
+from models.ml_models import create_xgb_model, xgb_predict
+
+
+class MODELS(Enum):
+    """
+    _summary_
+    """
+    SEQUENTIAL_NEURAL_NETWORK = 0
+    XGBOOST = 1
 
 
 class Oracle:
@@ -33,8 +42,14 @@ class Oracle:
 
         :param oracle_config: config dict for Oracle
         """
+        self.model = None
         self.save_output: bool = oracle_config["save_file"]
         self.output_path: str = oracle_config["output_path"]
+
+        if oracle_config["model"] == "neural_network":
+            self.model = MODELS.SEQUENTIAL_NEURAL_NETWORK
+        elif oracle_config["model"] == "xgboost":
+            self.model = MODELS.XGBOOST
 
     def prepare_training_data(self, player_game_logs: np.ndarray) -> tuple:
         """
@@ -43,7 +58,8 @@ class Oracle:
         :param player_game_logs: game logs of individual player
         :return: training predictors & outputs
         """
-        x_train, y_train = player_game_logs.iloc[:, :-1].drop("GAME_DATE_x", axis=1), player_game_logs.iloc[:, -1]
+        cols_to_drop = ["GAME_DATE_x", "FGM", "FG3M_x", "FTM"]
+        x_train, y_train = player_game_logs.iloc[:, :-1].drop(cols_to_drop, axis=1), player_game_logs.iloc[:, -1]
 
         return x_train.values.astype(np.float64), y_train.values.astype(np.float64)
 
@@ -62,6 +78,17 @@ class Oracle:
 
         # Take the MA for [MIN, FGA, FG3A_x, FTA]
         x_test_statistics = player_game_logs[["MIN", "FGA", "FG3A_x", "FTA"]].iloc[:ma_degree, :].mean().values
+        test_fg_pct = Oracle.get_pct(player_game_logs["FGM"].values[:ma_degree].sum(), 
+                                     player_game_logs["FGA"].values[:ma_degree].sum())
+        x_test_statistics = np.insert(x_test_statistics, 2, test_fg_pct)
+
+        test_3fg_pct = Oracle.get_pct(player_game_logs["FG3M_x"].values[:ma_degree].sum(),
+                                      player_game_logs["FG3A_x"].values[:ma_degree].sum())
+        x_test_statistics = np.insert(x_test_statistics, 4, test_3fg_pct)
+
+        test_ft_pct = Oracle.get_pct(player_game_logs["FTM"].values[:ma_degree].sum(),
+                                     player_game_logs["FTA"].values[:ma_degree].sum())
+        x_test_statistics = np.insert(x_test_statistics, 6, test_ft_pct)
 
         x_test_defense = player_game_logs[["D_FGM", "D_FGA", "D_FG_PCT", "PCT_PLUSMINUS",
                                            "FG3M_y", "FG3A_y", "FG3_PCT_y", "NS_FG3_PCT", "PLUSMINUS_x",
@@ -72,6 +99,18 @@ class Oracle:
         x_test = np.concatenate([x_test_statistics, [rest_days], home_or_away, x_test_defense])
 
         return x_test
+
+    @staticmethod
+    def get_pct(x: int, y: int) -> float:
+        """
+        Get pct x / y
+        """
+        if y > 0.0:
+            pct = np.float64(x / y)
+        else:
+            pct = 0.0
+        
+        return pct
 
     def get_players_forecast(self, players_full_name: str, filtered_players_logs: np.ndarray, team: Team) -> int:
         """
@@ -86,13 +125,30 @@ class Oracle:
         x_test = self.prepare_testing_data(filtered_players_logs, most_recent_game_date, team)
         x_test = self.assign_player_mins(players_full_name, x_test, team)
 
-        players_trained_model = SequentialNN(self.nn_config)
         print(f"Training for: {players_full_name}")
-        players_trained_model.fit_model(training_data, batch_size=24, epochs=self.nn_config["epochs"], 
-                                        validation_split=self.nn_config["validation_split"])
-        forecasted_points = players_trained_model.model.predict(x_test.reshape(1, len(x_test)))[0][0]
+        if self.model == MODELS.SEQUENTIAL_NEURAL_NETWORK:
+            players_trained_model = SequentialNN(self.nn_config)
+            players_trained_model.fit_model(training_data, batch_size=32, epochs=self.nn_config["epochs"], 
+                                            validation_split=self.nn_config["validation_split"])
+            forecasted_points = players_trained_model.model.predict(x_test.reshape(1, len(x_test)))[0][0]
+        
+        elif self.model == MODELS.XGBOOST:
+            split = round(self.nn_config["validation_split"] * len(training_data[0]))
+            training_data = (training_data[0][:-split], training_data[1][:-split])
+            validation_data = (training_data[0][-split:], training_data[1][-split:])
 
-        return int(forecasted_points)
+            xgb_model = create_xgb_model(training_data, validation_data)
+            forecasted_points = xgb_predict(xgb_model, x_test)
+
+        return forecasted_points
+
+    def run_neural_network(training_data: np.ndarray) -> int:
+        """_summary_
+
+        :param training_data: _description_
+        :return: _description_
+        """
+
 
     def get_team_forecast(self, team: Team):
         """
