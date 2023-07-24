@@ -2,8 +2,8 @@ import xgboost as xgb
 import numpy as np
 
 
-model_config = {"max_depth": 2, 'eta': 0.3, 'objective': "reg:squarederror",
-                "alpha": 2e-4, "lambda": 2e-3,
+model_config = {"max_depth": 4, 'eta': 0.3, 'objective': "reg:squarederror",
+                "alpha": 2e-3, "lambda": 2e-3,
                 "nthread": 5, "eval_metric": "rmse"}
 
 def create_xgb_model(train: tuple, validation_set: tuple) -> xgb:

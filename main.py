@@ -10,7 +10,7 @@ columns = ["MIN", "GAME_DATE_x", "FGM", "FGA", "FG_PCT", "FG3M_x","FG3A_x", "FG3
            "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT", "PLUSMINUS",
            "E_PACE", "E_DEF_RATING", "PTS"]
 
-game_details = {"home_team": "76ers", "away_team": "Bulls", "game_date": "3-20-2023"}
+game_details = {"home_team": "Nets", "away_team": "Cavaliers", "game_date": "3-21-2023"}
 oracle_config = {"model": "xgboost", "save_file": True, "output_path": "output"}
 
 nn_config = {"columns": columns, "holdout": False, "MA_degree": 5,

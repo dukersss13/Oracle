@@ -91,8 +91,11 @@ class LockerRoom:
         """
         self._update_game_plan()
         set_active_players = LockerRoom._pause_for_configurations()
-        if set_active_players:
-            self.set_active_players()           
+
+        if set_active_players == 1:
+            self.set_active_players()
+        else:
+            raise ValueError("Aborting program!")         
     
     def _fetch_all_logs(self):
         """_summary_
@@ -103,14 +106,14 @@ class LockerRoom:
         self.all_logs["GAME_DATE"] = pd.to_datetime(self.all_logs["GAME_DATE"])
 
     @staticmethod
-    def _pause_for_configurations():
+    def _pause_for_configurations() -> int:
         """
         Pauses the program so user can set the lineups
         """
         print("\nSet active players in active_players.json.")
         print("Input 0 for injured/DNP. Else, leave as null")
 
-        good_to_go = input(("Enter 1 to continue: "))
+        good_to_go = int(input(("Enter 1 to continue: ")))
 
         return good_to_go
 
