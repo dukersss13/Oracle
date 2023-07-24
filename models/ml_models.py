@@ -29,7 +29,7 @@ def create_xgb_model(train: tuple, validation_set: tuple) -> xgb:
     return xgb_model
 
 
-def xgb_predict(xgb_model: xgb, x_test: np.ndarray) -> int:
+def xgb_predict(xgb_model: xgb, x_test: np.ndarray) -> float:
     """_summary_
 
     :param xgb_model: _description_
@@ -38,4 +38,4 @@ def xgb_predict(xgb_model: xgb, x_test: np.ndarray) -> int:
     """
     xgb_prediction = xgb_model.predict(xgb.DMatrix(x_test.reshape(1, -1)))[0]
 
-    return round(xgb_prediction)
+    return xgb_prediction

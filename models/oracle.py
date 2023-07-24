@@ -140,7 +140,7 @@ class Oracle:
             xgb_model = create_xgb_model(training_data, validation_data)
             forecasted_points = xgb_predict(xgb_model, x_test)
 
-        return forecasted_points
+        return round(forecasted_points)
 
     def run_neural_network(training_data: np.ndarray) -> int:
         """_summary_
