@@ -3,6 +3,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import pandas as pd
 from enum import Enum
+from sklearn.metrics import mean_squared_error
 
 from data_prep.locker_room import LockerRoom, Team
 from models.neural_networks import SequentialNN
@@ -32,9 +33,6 @@ class Oracle:
 
         self.locker_room = LockerRoom(game_details, nn_config)
         self.set_oracle_config(oracle_config)
-         
-        # if nn_config["holdout"]:
-        #     self.box_score = self.locker_room.fetch_game_box_score(self.game_date)
 
     def set_oracle_config(self, oracle_config: dict):
         """
@@ -127,28 +125,42 @@ class Oracle:
 
         print(f"Training for: {players_full_name}")
         if self.model == MODELS.SEQUENTIAL_NEURAL_NETWORK:
-            players_trained_model = SequentialNN(self.nn_config)
-            players_trained_model.fit_model(training_data, batch_size=32, epochs=self.nn_config["epochs"], 
-                                            validation_split=self.nn_config["validation_split"])
-            forecasted_points = players_trained_model.model.predict(x_test.reshape(1, len(x_test)))[0][0]
+            forecasted_points = self.run_neural_network(training_data, x_test)
         
         elif self.model == MODELS.XGBOOST:
-            split = round(self.nn_config["validation_split"] * len(training_data[0]))
-            training_data = (training_data[0][:-split], training_data[1][:-split])
-            validation_data = (training_data[0][-split:], training_data[1][-split:])
-
-            xgb_model = create_xgb_model(training_data, validation_data)
-            forecasted_points = xgb_predict(xgb_model, x_test)
+            forecasted_points = self.run_xgboost_model(training_data, x_test)
 
         return round(forecasted_points)
 
-    def run_neural_network(training_data: np.ndarray) -> int:
+    def run_neural_network(self, training_data: np.ndarray, x_test: np.ndarray) -> float:
         """_summary_
 
         :param training_data: _description_
         :return: _description_
         """
+        players_trained_model = SequentialNN(self.nn_config)
+        players_trained_model.fit_model(training_data, batch_size=32,
+                                        epochs=self.nn_config["epochs"], 
+                                        validation_split=self.nn_config["validation_split"])
+        forecasted_points = players_trained_model.model.predict(x_test.reshape(1, len(x_test)))[0][0]
 
+        return forecasted_points
+
+    def run_xgboost_model(self, training_data: np.ndarray, x_test: np.ndarray) -> float:
+        """_summary_
+
+        :param training_data: _description_
+        :param x_test: _description_
+        :return: _description_
+        """
+        split = round(self.nn_config["validation_split"] * len(training_data[0]))
+        training_data = (training_data[0][:-split], training_data[1][:-split])
+        validation_data = (training_data[0][-split:], training_data[1][-split:])
+
+        xgb_model = create_xgb_model(training_data, validation_data)
+        forecasted_points = xgb_predict(xgb_model, x_test)
+
+        return forecasted_points
 
     def get_team_forecast(self, team: Team):
         """
@@ -162,7 +174,7 @@ class Oracle:
         elif team == Team.AWAY:
             data = self.locker_room.away_game_plan
 
-        forecast_dict = dict(zip(["PLAYER_NAME", "FORECASTED_POINTS"], [[] for _ in range(2)]))
+        forecast_dict = dict(zip(["PLAYER_NAME", "FORECASTED_POINTS", "ACTUAL_POINTS"], [[] for _ in range(3)]))
         total_players = len(data.active_players)
         players_done = 0
 
@@ -173,7 +185,8 @@ class Oracle:
 
             print(f"Starting forecast for: {players_name}")
             forecasted_points = self.get_players_forecast(players_name, filtered_players_logs, team)
-            forecast_dict = Oracle.append_to_forecast_dict(forecast_dict, players_name, forecasted_points)
+            actual_points = filtered_players_logs["PTS"].values[-1] if self.holdout else 0
+            forecast_dict = Oracle.append_to_forecast_dict(forecast_dict, players_name, forecasted_points, actual_points)
             players_done += 1
 
             print(f"Finished forecasting for: {players_name}")
@@ -199,7 +212,7 @@ class Oracle:
         return x_test
 
     @staticmethod
-    def append_to_forecast_dict(forecast_dict: dict, players_name: str, forecasted_points: float) -> dict:
+    def append_to_forecast_dict(forecast_dict: dict, players_name: str, forecasted_points: int, actual_points: int) -> dict:
         """
         Append forecasted statistics to forecast dict
 
@@ -210,6 +223,7 @@ class Oracle:
         """
         forecast_dict["PLAYER_NAME"].append(players_name)
         forecast_dict["FORECASTED_POINTS"].append(forecasted_points)
+        forecast_dict["ACTUAL_POINTS"].append(actual_points)
 
         return forecast_dict  
 
@@ -221,20 +235,22 @@ class Oracle:
         :return forecast_df: the df format of the dictionary
         """
         forecast_df = pd.DataFrame(forecast_dict)
-
-        if self.holdout:
-            forecast_df = forecast_df.merge(self.box_score, how="left")[["PLAYER_NAME", "FORECASTED_POINTS", "PTS"]]
-            forecast_df["PTS"] = forecast_df["PTS"]
-            total_actual_points = forecast_df["PTS"].sum()
-        else:
-            forecast_df["PTS"] = np.zeros(len(forecast_df))
-            total_actual_points = 0
-
         totals = pd.DataFrame({"PLAYER_NAME": ["Total"], "FORECASTED_POINTS": [forecast_df["FORECASTED_POINTS"].sum()],
-                               "PTS": [total_actual_points]})
+                               "ACTUAL_POINTS": [forecast_df["ACTUAL_POINTS"].sum()]})
         forecast_df = pd.concat([forecast_df, totals], axis=0)
 
         return forecast_df
+
+    @staticmethod
+    def calculate_rmse(forecast_df: pd.DataFrame) -> float:
+        """_summary_
+
+        :param forecast_df: _description_
+        :return: _description_
+        """
+        rmse = np.sqrt(mean_squared_error(forecast_df["FORECASTED_POINTS"], forecast_df["ACTUAL_POINTS"]))
+
+        return round(rmse, 2)
 
     def save_forecasts(self, home_team_forecast_df: pd.DataFrame, away_team_forecast_df: pd.DataFrame):
         """
@@ -262,6 +278,11 @@ class Oracle:
         print("Running Oracle")
         home_team_forecast_df = self.get_team_forecast(Team.HOME)
         away_team_forecast_df = self.get_team_forecast(Team.AWAY)
+
+        home_rmse = Oracle.calculate_rmse(home_team_forecast_df.iloc[:-1, :])
+        print(f"RMSE for the {self.locker_room.home_team}: {home_rmse}")
+        away_rmse = Oracle.calculate_rmse(away_team_forecast_df.iloc[:-1, :])
+        print(f"RMSE for the {self.locker_room.away_team}: {away_rmse}")
         
         if self.save_output:
             print("Saving output files")

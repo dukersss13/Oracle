@@ -11,9 +11,9 @@ columns = ["MIN", "GAME_DATE_x", "FGM", "FGA", "FG_PCT", "FG3M_x","FG3A_x", "FG3
            "E_PACE", "E_DEF_RATING", "PTS"]
 
 game_details = {"home_team": "Nets", "away_team": "Cavaliers", "game_date": "3-21-2023"}
-oracle_config = {"model": "neural_network", "save_file": True, "output_path": "output"}
+oracle_config = {"model": "xgboost", "save_file": True, "output_path": "output"}
 
-nn_config = {"columns": columns, "holdout": False, "MA_degree": 5,
+nn_config = {"columns": columns, "holdout": True, "MA_degree": 5,
              "input_shape": len(columns)-5, "output_shape": 1, "validation_split": .10,
              "activation_func": "relu", "learning_rate": 3e-4, "output_activation_func": "relu",
              "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 500}
