@@ -25,10 +25,10 @@ class SequentialNN:
 
     def create_neural_network(self):
         model = Sequential()
-        model.add(Dense(100, activation=self.activation_func, input_shape=(self.input_shape, )))
-        model.add(Dense(120, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(2e-3))) # Jordan
+        model.add(Dense(120, activation=self.activation_func, input_shape=(self.input_shape, )))
+        model.add(Dense(120, activation=self.activation_func, batch_size=24, kernel_regularizer=regularizers.l2(2e-3))) # Jordan
         model.add(Dropout(0.21)) # Tim Duncan
-        model.add(Dense(130, activation=self.activation_func, batch_size=24, kernel_regularizer=regularizers.l1(1e-3))) # Nash
+        model.add(Dense(130, activation=self.activation_func, batch_size=24, kernel_regularizer=regularizers.l1(2e-3))) # Nash
         model.add(Dropout(0.20)) # Ray Allen
         model.add(Dense(self.output_shape, activation=self.output_activation_func))
 

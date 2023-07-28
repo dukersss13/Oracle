@@ -7,19 +7,20 @@ from sklearn.metrics import mean_squared_error
 
 from data_prep.locker_room import LockerRoom, Team
 from models.neural_networks import SequentialNN
-from models.ml_models import create_xgb_model, xgb_predict
+from models.ml_models import XGBoost, SupportVectorRegression
 
 
 class MODELS(Enum):
     """
     _summary_
     """
-    SEQUENTIAL_NEURAL_NETWORK = 0
+    FEED_FORWARD_NN = 0
     XGBOOST = 1
+    SVR = 2
 
 
 class Oracle:
-    def __init__(self, game_details: dict, oracle_config: dict, nn_config: dict):
+    def __init__(self, game_details: dict, oracle_config: dict, model_config: dict):
         """
         Initialize the Oracle
 
@@ -27,11 +28,12 @@ class Oracle:
         :param oracle_config: _description_
         :param nn_config: _description_
         """
+        self.model_config: dict = model_config
         self.game_date: str = game_details["game_date"]
-        self.nn_config: dict = nn_config
-        self.holdout: bool = nn_config["holdout"]
+        self.holdout: bool = oracle_config["holdout"]
+        self.oracle_config = oracle_config
 
-        self.locker_room = LockerRoom(game_details, nn_config)
+        self.locker_room = LockerRoom(game_details, oracle_config["features"])
         self.set_oracle_config(oracle_config)
 
     def set_oracle_config(self, oracle_config: dict):
@@ -44,10 +46,12 @@ class Oracle:
         self.save_output: bool = oracle_config["save_file"]
         self.output_path: str = oracle_config["output_path"]
 
-        if oracle_config["model"] == "neural_network":
-            self.model = MODELS.SEQUENTIAL_NEURAL_NETWORK
-        elif oracle_config["model"] == "xgboost":
+        if oracle_config["model"] == "FNN":
+            self.model = MODELS.FEED_FORWARD_NN
+        elif oracle_config["model"] == "XGBoost":
             self.model = MODELS.XGBOOST
+        elif oracle_config["model"] == "SVR":
+            self.model = MODELS.SVR
 
     def prepare_training_data(self, player_game_logs: np.ndarray) -> tuple:
         """
@@ -70,7 +74,7 @@ class Oracle:
         :param team: home or away
         :return: x_test & y_test (if applicable)
         """
-        ma_degree: int = self.nn_config["MA_degree"]
+        ma_degree: int = self.oracle_config["MA_degree"]
         home_or_away = np.array([1., 0.]) if team == Team.HOME else np.array([0., 1.])
         rest_days = (pd.Timestamp(self.game_date) - most_recent_game_date).days
 
@@ -121,14 +125,17 @@ class Oracle:
         most_recent_game_date = self.locker_room.get_most_recent_game_date(filtered_players_logs)
         training_data = self.prepare_training_data(filtered_players_logs)
         x_test = self.prepare_testing_data(filtered_players_logs, most_recent_game_date, team)
-        x_test = self.assign_player_mins(players_full_name, x_test, team)
+        x_test = self.assign_player_mins(players_full_name, x_test, team).reshape(1, -1)
 
         print(f"Training for: {players_full_name}")
-        if self.model == MODELS.SEQUENTIAL_NEURAL_NETWORK:
+        if self.model == MODELS.FEED_FORWARD_NN:
             forecasted_points = self.run_neural_network(training_data, x_test)
         
         elif self.model == MODELS.XGBOOST:
             forecasted_points = self.run_xgboost_model(training_data, x_test)
+        
+        elif self.model == MODELS.SVR:
+            forecasted_points = self.run_svr_model(training_data, x_test)
 
         return round(forecasted_points)
 
@@ -138,11 +145,11 @@ class Oracle:
         :param training_data: _description_
         :return: _description_
         """
-        players_trained_model = SequentialNN(self.nn_config)
+        players_trained_model = SequentialNN(self.model_config)
         players_trained_model.fit_model(training_data, batch_size=32,
-                                        epochs=self.nn_config["epochs"], 
-                                        validation_split=self.nn_config["validation_split"])
-        forecasted_points = players_trained_model.model.predict(x_test.reshape(1, len(x_test)))[0][0]
+                                        epochs=self.model_config["epochs"], 
+                                        validation_split=self.model_config["validation_split"])
+        forecasted_points = players_trained_model.model.predict(x_test)[0][0]
 
         return forecasted_points
 
@@ -153,12 +160,25 @@ class Oracle:
         :param x_test: _description_
         :return: _description_
         """
-        split = round(self.nn_config["validation_split"] * len(training_data[0]))
+        split = round(0.1 * len(training_data[0]))
         training_data = (training_data[0][:-split], training_data[1][:-split])
         validation_data = (training_data[0][-split:], training_data[1][-split:])
 
-        xgb_model = create_xgb_model(training_data, validation_data)
-        forecasted_points = xgb_predict(xgb_model, x_test)
+        xgb_model = XGBoost(self.model_config, training_data, validation_data)
+        forecasted_points = xgb_model.xgb_predict(x_test)
+
+        return forecasted_points
+
+    @staticmethod
+    def run_svr_model(training_data: np.ndarray, x_test: np.ndarray) -> float:
+        """_summary_
+
+        :param training_data: _description_
+        :param x_test: _description_
+        :return: _description_
+        """
+        svr_model = SupportVectorRegression(training_data)
+        forecasted_points = svr_model.svr_predict(x_test)
 
         return forecasted_points
 

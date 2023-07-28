@@ -36,7 +36,7 @@ class GamePlan:
 
 
 class LockerRoom:
-    def __init__(self, game_details: dict, nn_config: dict, season="2022-23"):
+    def __init__(self, game_details: dict, features: list, season="2022-23"):
         """
         Initialize the Locker Room
 
@@ -55,8 +55,7 @@ class LockerRoom:
         self.away_team = game_details["away_team"]
         self.game_date = game_details["game_date"]
 
-        self.nn_config = nn_config
-        self.predictors_plus_label = nn_config["columns"]
+        self.predictors_plus_label = features
         self.nba_teams_info = pd.read_csv("data/static_data/static_team_info.csv")
 
         self._fetch_teams_data()
