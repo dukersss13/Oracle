@@ -7,7 +7,7 @@ features = ["MIN", "GAME_DATE_x", "FGM", "FGA", "FG_PCT", "FG3M_x","FG3A_x", "FG
            "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT", "PLUSMINUS",
            "E_PACE", "E_DEF_RATING", "PTS"]
 
-game_details = {"home_team": "Nuggets", "away_team": "Raptors", "game_date": "3-6-2023"}
+game_details = {"home_team": "Magic", "away_team": "Bucks", "game_date": "3-7-2023"}
 
 oracle_config = {"model": "SEQUENTIAL", "features": features, "holdout": True, "MA_degree": 5, "timer": True,
                  "scaling_method": "MinMax", "save_file": True, "output_path": "output"}
