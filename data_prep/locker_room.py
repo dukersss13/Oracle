@@ -1,6 +1,5 @@
 import os
 
-from typing import Tuple
 import json
 import pandas as pd
 import numpy as np
@@ -209,7 +208,7 @@ class LockerRoom:
         away_roster = self.away_game_plan.team_roster
 
         json =  {self.home_team: dict(zip(home_roster["PLAYER"].values, [None for _ in range(len(home_roster))])),
-                    self.away_team: dict(zip(away_roster["PLAYER"].values, [None for _ in range(len(away_roster))]))}
+                 self.away_team: dict(zip(away_roster["PLAYER"].values, [None for _ in range(len(away_roster))]))}
         
         return json
 
@@ -269,7 +268,7 @@ class LockerRoom:
         players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(lambda x: x.split(" "))
         players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(LockerRoom.convert_to_timestamp)
 
-        players_game_logs_df = players_game_logs_df[players_game_logs_df["GAME_DATE"] < self.game_date]
+        players_game_logs_df = players_game_logs_df[players_game_logs_df["GAME_DATE"] <= self.game_date]
         players_game_logs_df["REST_DAYS"] = players_game_logs_df["GAME_DATE"].diff(periods=-1)
         players_game_logs_df = players_game_logs_df.iloc[:-1, :]
         players_game_logs_df.loc[:, "REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
@@ -375,7 +374,7 @@ class LockerRoom:
             print(f"WARNING: {lookup_values}'s ID cannot be found!")
             teams_id = None
         
-        return int(teams_id)
+        return teams_id.values[0]
 
     def fetch_team_game_logs(self, team_name: str) -> pd.DataFrame:
         """
@@ -411,15 +410,3 @@ class LockerRoom:
         box_score = boxscoretraditionalv2.BoxScoreTraditionalV2(game_id=game_id).get_data_frames()[0]
 
         return box_score
-
-    def fetch_matchup_stats(self, off_player_id: int, def_player_id: int, season: str = "2022-23"):
-        """
-        :param off_player:
-        :param def_player:
-        :param season:
-        :return:
-        """
-        matchup_data = leagueseasonmatchups.LeagueSeasonMatchups(off_player_id_nullable=off_player_id,
-                                                                 def_player_id_nullable=def_player_id,
-                                                                 season=season).get_data_frames()[0]
-        return matchup_data

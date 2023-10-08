@@ -19,7 +19,7 @@ class MODELS(Enum):
 
 
 class NeuralNet:
-    def __init__(self, nn_type: MODELS, config: dict):
+    def __init__(self, nn_config: dict):
         """
         Neural Net class to init, train, test different
         neural networks
@@ -27,21 +27,20 @@ class NeuralNet:
         :param nn_type: type of neural net: Sequential, GRU
         :param config: neural network's configurations
         """
-        self.nn_type = nn_type
-        self.input_shape = config["input_shape"]
-        self.activation_func = config["activation_func"]
-        self.output_activation_func = config["output_activation_func"]
-        self.model = self.compile_model(config["learning_rate"], config["loss_function"],
-                                        config["optimizer_function"], config["metrics"])
+        self.input_shape = nn_config["input_shape"]
+        self.activation_func = nn_config["activation_func"]
+        self.output_activation_func = nn_config["output_activation_func"]
+        self.model = self.compile_model(nn_config["learning_rate"], nn_config["loss_function"],
+                                        nn_config["optimizer_function"], nn_config["metrics"])
 
     def create_sequential_nn(self):
         model = Sequential()
-        model.add(Dense(120, activation=self.activation_func, input_shape=(self.input_shape, )))
-        model.add(Dense(120, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(2e-3))) # Jordan
-        model.add(Dropout(0.21)) # Tim Duncan
-        # model.add(Dense(130, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(1e-3))) # Nash
-        # model.add(Dropout(0.20)) # Ray Allen
-        model.add(Dense(self.output_shape, activation=self.output_activation_func))
+        model.add(Dense(81, activation=self.activation_func, input_shape=(self.input_shape, ))) # Kobe
+        model.add(Dense(100, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(2e-3))) # Jordan
+        model.add(Dropout(0.13)) # Nash
+        model.add(Dense(100, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(2e-3)))
+        model.add(Dropout(0.20)) # Ray Allen
+        model.add(Dense(1, activation=self.output_activation_func))
 
         return model
 

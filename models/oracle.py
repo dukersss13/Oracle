@@ -4,7 +4,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import pandas as pd
 from time import time
-from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.metrics import mean_absolute_percentage_error
 
 from data_prep.locker_room import LockerRoom, Team
 from models.neural_networks import MODELS, NeuralNet
@@ -42,17 +42,18 @@ class Oracle:
         self.holdout: bool = oracle_config["holdout"]
         self.timer: bool = oracle_config["timer"]
 
-        if oracle_config["model"] == "SEQUENTIAL":
+        model = oracle_config["model"].upper()
+
+        if model == "SEQUENTIAL":
             self.model = MODELS.SEQUENTIAL
-        elif oracle_config["model"] == "XGBOOST":
+        elif model == "XGBOOST":
             self.model = MODELS.XGBOOST
-        elif oracle_config["model"] == "SVR":
+        elif model == "SVR":
             self.model = MODELS.SVR
         else:
             raise NotImplementedError(f"{self.model} is not implemented - select a different model!")
 
-    @staticmethod
-    def scale_input(X: np.ndarray, scaling_method: str) -> np.ndarray:
+    def scale_input(self, X: np.ndarray) -> np.ndarray:
         """
         Scale input depending on the scaling method
 
@@ -60,8 +61,7 @@ class Oracle:
         :param scaling_method: scaling method
         :return: scaled input
         """
-        if scaling_method is not None:
-            scaling_method = scaling_method.lower() 
+        scaling_method = self.oracle_config["scaling_method"]
 
         if scaling_method not in ["standard", "minmax", None]:
             raise NotImplementedError(f"Do not recognize {scaling_method} scaling method!")
@@ -85,9 +85,9 @@ class Oracle:
         :return: training predictors & outputs
         """
         cols_to_drop = ["GAME_DATE_x", "FGM", "FG3M_x", "FTM"]
-        x_train, y_train = player_game_logs.iloc[:, :-1].drop(cols_to_drop, axis=1), player_game_logs.iloc[:, -1]
+        x_train, y_train = player_game_logs.iloc[1:, :-1].drop(cols_to_drop, axis=1), player_game_logs.iloc[1:, -1]
 
-        x_train = Oracle.scale_input(x_train.values.astype(np.float32)) 
+        x_train = self.scale_input(x_train.values.astype(np.float32)) 
 
         return x_train, y_train.values.astype(np.float32)
 
@@ -105,7 +105,7 @@ class Oracle:
         rest_days = (pd.Timestamp(self.game_date) - most_recent_game_date).days
 
         # Take the MA for [MIN, FGA, FG3A_x, FTA]
-        x_test_statistics = player_game_logs[["MIN", "FGA", "FG3A_x", "FTA"]].iloc[:ma_degree, :].mean().values
+        x_test_statistics = player_game_logs[["MIN", "FGA", "FG3A_x", "FTA"]].iloc[1:ma_degree, :].mean().values
         test_fg_pct = Oracle.get_pct(player_game_logs["FGM"].values[:ma_degree].sum(), 
                                      player_game_logs["FGA"].values[:ma_degree].sum())
         x_test_statistics = np.insert(x_test_statistics, 2, test_fg_pct)
@@ -122,7 +122,7 @@ class Oracle:
                                            "FG3M_y", "FG3A_y", "FG3_PCT_y", "NS_FG3_PCT", "PLUSMINUS_x",
                                            "FG2M", "FG2A", "FG2_PCT", "NS_FG2_PCT", "PLUSMINUS_y",
                                            "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT", "PLUSMINUS",
-                                           "E_PACE", "E_DEF_RATING"]].iloc[0, :].values
+                                           "E_PACE", "E_DEF_RATING"]].iloc[1, :].values
 
         x_test = np.concatenate([x_test_statistics, [rest_days], home_or_away, x_test_defense])
 
@@ -152,6 +152,7 @@ class Oracle:
         training_data = self.prepare_training_data(filtered_players_logs)
         x_test = self.prepare_testing_data(filtered_players_logs, most_recent_game_date, team)
         x_test = self.assign_player_mins(players_full_name, x_test, team).reshape(1, -1)
+        x_test = self.scale_input(x_test)
 
         print(f"Training for: {players_full_name}")
         if self.model == MODELS.SEQUENTIAL:
@@ -176,7 +177,7 @@ class Oracle:
         players_trained_model.fit_model(training_data, batch_size=32,
                                         epochs=self.model_config["epochs"], 
                                         validation_split=self.model_config["validation_split"])
-        forecasted_points = players_trained_model.model.predict(x_test)[0][0]
+        forecasted_points = players_trained_model.model.predict(x_test.astype(np.float32))[0][0]
 
         return forecasted_points
 
@@ -250,6 +251,7 @@ class Oracle:
         """
         Manually assign player's minutes
 
+        :param players_full_name: player's full name
         :param x_test: X test (input predictors for NN)
         :return: x_test: X Test (input predictors for NN)
         """
@@ -291,17 +293,6 @@ class Oracle:
 
         return forecast_df
 
-    @staticmethod
-    def calculate_rmse(actual_values: np.ndarray, forecasted_values: np.ndarray) -> float:
-        """
-        Calculate the root MSE
-
-        :param forecast_df: results df containing the forecasted + actual points
-        """
-        rmse = np.sqrt(mean_squared_error(actual_values, forecasted_values))
-
-        return round(rmse, 2)
-
     def save_forecasts(self, home_team_forecast_df: pd.DataFrame, away_team_forecast_df: pd.DataFrame):
         """
         Save the forecasts in excel files
@@ -321,24 +312,20 @@ class Oracle:
             home_team_forecast_df.to_excel(writer, sheet_name=f"{self.locker_room.home_team} Forecast", index=False)
             away_team_forecast_df.to_excel(writer, sheet_name=f"{self.locker_room.away_team} Forecast", index=False)
 
-    def run(self) -> Tuple[float, float, float, float]:
+    def run(self):
         """
         Run Oracle
         """
         print("Running Oracle")
         home_team_forecast_df = self.get_team_forecast(Team.HOME)
         away_team_forecast_df = self.get_team_forecast(Team.AWAY)
-
-        home_rmse_players = Oracle.calculate_rmse(home_team_forecast_df.iloc[:-1, 1], home_team_forecast_df.iloc[:-1, 0])
-        print(f"RMSE for the {self.locker_room.home_team}: {home_rmse_players}")
-        away_rmse_players = Oracle.calculate_rmse(away_team_forecast_df.iloc[:-1, 1], away_team_forecast_df.iloc[:-1, 0])
-        print(f"RMSE (players) for the {self.locker_room.away_team}: {away_rmse_players}")
         
-        home_team_mae = mean_absolute_error(home_team_forecast_df.iloc[-1, 0], home_team_forecast_df.iloc[-1, 1])
-        away_team_mae = mean_absolute_error(away_team_forecast_df.iloc[-1, 0], away_team_forecast_df.iloc[-1, 1])
+        home_team_mape = mean_absolute_percentage_error([home_team_forecast_df.iloc[-1, 1]], [home_team_forecast_df.iloc[-1, 2]])
+        away_team_mape = mean_absolute_percentage_error([away_team_forecast_df.iloc[-1, 1]], [away_team_forecast_df.iloc[-1, 2]])
+        print(f"Home MAPE: {home_team_mape}")
+        print(f"Away MAPE: {away_team_mape}")
 
         if self.save_output:
             print("Saving output files")
             self.save_forecasts(home_team_forecast_df, away_team_forecast_df)
-        
-        return home_team_mae, home_rmse_players, away_team_mae, away_rmse_players
+
