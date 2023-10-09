@@ -1,11 +1,11 @@
 
 features = ["MIN", "GAME_DATE_x", "FGM", "FGA", "FG_PCT", "FG3M_x","FG3A_x", "FG3_PCT_x", "FTM", "FTA", "FT_PCT",
-           "HOME", "AWAY", "REST_DAYS",
-           "D_FGM", "D_FGA", "D_FG_PCT", "PCT_PLUSMINUS",
-           "FG3M_y", "FG3A_y", "FG3_PCT_y", "NS_FG3_PCT", "PLUSMINUS_x",
-           "FG2M", "FG2A", "FG2_PCT", "NS_FG2_PCT", "PLUSMINUS_y",
-           "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT", "PLUSMINUS",
-           "E_PACE", "E_DEF_RATING", "PTS"]
+            "HOME", "AWAY", "REST_DAYS",
+            "D_FGM", "D_FGA", "D_FG_PCT", "PCT_PLUSMINUS",
+            "FG3M_y", "FG3A_y", "FG3_PCT_y", "NS_FG3_PCT", "PLUSMINUS_x",
+            "FG2M", "FG2A", "FG2_PCT", "NS_FG2_PCT", "PLUSMINUS_y",
+            "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT", "PLUSMINUS",
+            "E_PACE", "E_DEF_RATING", "PTS"]
 
 game_details = {"home_team": "Rockets", "away_team": "Celtics", "game_date": "3-13-2023"}
 
