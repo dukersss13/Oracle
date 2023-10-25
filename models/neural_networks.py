@@ -35,10 +35,10 @@ class NeuralNet:
 
     def create_sequential_nn(self):
         model = Sequential()
-        model.add(Dense(81, activation=self.activation_func, input_shape=(self.input_shape, ))) # Kobe
-        model.add(Dense(100, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(2e-3))) # Jordan
+        model.add(Dense(128, activation=self.activation_func, input_shape=(self.input_shape, )))
+        model.add(Dense(81, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(2e-3)))
         model.add(Dropout(0.13)) # Nash
-        model.add(Dense(100, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(2e-3)))
+        model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(1e-3)))
         model.add(Dropout(0.20)) # Ray Allen
         model.add(Dense(1, activation=self.output_activation_func))
 
@@ -65,12 +65,12 @@ class NeuralNet:
         return model
 
     def fit_model(self, training_set: Tuple[np.ndarray, np.ndarray], batch_size: int, epochs: int,
-                  validation_split: int = 0.10, callback: EarlyStopping = None):
+                  validation_split: int = 0.15, callback: EarlyStopping = None):
         """
         Function to fit the model
         """
         if callback is None:
-            callback = EarlyStopping(monitor="loss", min_delta=1e-6, patience=10)
+            callback = EarlyStopping(monitor="loss", min_delta=1e-6, patience=20)
 
         x_train, y_train = training_set
         self.model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs,

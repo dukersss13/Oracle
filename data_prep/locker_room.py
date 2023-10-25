@@ -16,6 +16,8 @@ pd.set_option('mode.chained_assignment', None)
 pd.set_option('display.max_columns', None)
 
 
+current_season = "2023-24"
+
 class Team(Enum):
     HOME = 0
     AWAY = 1
@@ -35,7 +37,7 @@ class GamePlan:
 
 
 class LockerRoom:
-    def __init__(self, game_details: dict, features: list, season="2022-23"):
+    def __init__(self, game_details: dict, features: list, season=current_season):
         """
         Initialize the Locker Room
 
@@ -224,7 +226,7 @@ class LockerRoom:
 
         return players_game_log
 
-    def get_filtered_players_logs(self, players_id: int, team: Team) -> pd.DataFrame:
+    def get_filtered_players_logs(self, players_id: int) -> pd.DataFrame:
         """
         Retrieve the filtered game logs for given player
 
@@ -240,11 +242,11 @@ class LockerRoom:
                 print(f"Logs for playerID: {players_id.values[0]} for {season} cannot be fetched.")
 
         if not all_logs.empty:
-            filtered_logs = self._add_predictors_to_players_log(all_logs, team)
+            all_logs = self._add_predictors_to_players_log(all_logs)
 
-        return filtered_logs
+        return all_logs
 
-    def _add_predictors_to_players_log(self, players_game_logs_df: pd.DataFrame, team: Team) -> pd.DataFrame:
+    def _add_predictors_to_players_log(self, players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
         """_summary_
 
         :param players_game_log: _description_
@@ -253,7 +255,7 @@ class LockerRoom:
         players_log = self._add_rest_days_and_opp_id(players_game_logs_df)
         # most_recent_game_date = self.get_most_recent_game_date(players_game_logs_df)
         players_log = LockerRoom._add_home_away_columns(players_log)
-        complete_log = self._merge_defensive_stats_to_players_log(players_log, team)
+        complete_log = self._merge_defensive_stats_to_players_log(players_log)
         filtered_log = LockerRoom.filter_stats(complete_log, self.predictors_plus_label)
 
         return filtered_log
@@ -276,7 +278,7 @@ class LockerRoom:
 
         return players_game_logs_df
 
-    def _merge_defensive_stats_to_players_log(self, players_game_log: pd.DataFrame, team: Team):
+    def _merge_defensive_stats_to_players_log(self, players_game_log: pd.DataFrame) -> pd.DataFrame:
         """_summary_
 
         :param players_game_log: _description_

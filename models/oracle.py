@@ -140,10 +140,13 @@ class Oracle:
         
         return pct
 
-    def get_players_forecast(self, players_full_name: str, filtered_players_logs: np.ndarray, team: Team) -> int:
+    def get_players_forecast(self, players_full_name: str, filtered_players_logs: pd.DataFrame, team: Team) -> int:
         """
         """
-        if filtered_players_logs.shape[0] < 15:
+        if filtered_players_logs.empty:
+            return 0
+
+        elif filtered_players_logs.shape[0] < 15:
             print(f"WARNING: {players_full_name} has only played {filtered_players_logs.shape[0]} games.")
             print(f"WARNING: Cannot run forecast for {players_full_name}. Will use player's average as forecast")
             return int(filtered_players_logs.iloc[:, -1].mean())
@@ -164,7 +167,7 @@ class Oracle:
         elif self.model == MODELS.SVR:
             forecasted_points = self.run_svr_model(training_data, x_test)
         
-        return round(forecasted_points)
+        return max([round(forecasted_points), 0])
 
     def run_neural_network(self, training_data: Tuple[np.ndarray, np.ndarray], x_test: np.ndarray) -> float:
         """
@@ -227,7 +230,7 @@ class Oracle:
 
         for players_name, players_id in data.active_players.iterrows():
             print(f"\nFetching game logs for: {players_name}")
-            filtered_players_logs = self.locker_room.get_filtered_players_logs(players_id, team)
+            filtered_players_logs = self.locker_room.get_filtered_players_logs(players_id)
 
             print(f"Starting forecast for: {players_name}")
             forecasted_points = self.get_players_forecast(players_name, filtered_players_logs, team)

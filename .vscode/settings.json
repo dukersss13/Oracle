@@ -4,7 +4,8 @@
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
-    "terminal.integrated.fontFamily": "Consolas",
+    "terminal.integrated.fontFamily": "monospace",
     "debug.console.fontFamily": "monospace",
-    "debug.console.fontSize": 13
+    "debug.console.fontSize": 14,
+    "terminal.integrated.fontSize": 14
 }   
