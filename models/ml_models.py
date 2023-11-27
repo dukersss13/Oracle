@@ -15,9 +15,9 @@ class XGBoost:
         self.model_config = model_config
         self.train_data = train_data
         self.validation_set = validation_set
-        self.xgboost_model = self.create_xgb_model()
+        self.xgboost_model = self._create_xgb_model()
 
-    def create_xgb_model(self) -> xgb:
+    def _create_xgb_model(self) -> xgb:
         """_summary_
 
         Args:

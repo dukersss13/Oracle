@@ -4,19 +4,22 @@ import json
 import pandas as pd
 import numpy as np
 from enum import Enum
-
-from nba_api.stats.endpoints import (playergamelog, leagueseasonmatchups, boxscoretraditionalv2,
-                                     commonteamroster, teamgamelogs, leaguedashptteamdefend)
-from nba_api.stats.library.parameters import SeasonAll
-from nba_api.stats.static import  players
 from tensorflow import one_hot
 from dataclasses import dataclass
+
+from data_prep.gamelogs import update_data, concat_all_logs, nba_teams_info
+from nba_api.stats.endpoints import (playergamelog, boxscoretraditionalv2,
+                                     commonteamroster)
+from nba_api.stats.static import  players
+
 
 pd.set_option('mode.chained_assignment', None)
 pd.set_option('display.max_columns', None)
 
 
 current_season = "2023-24"
+collected_seasons = ["2023-24", "2022-23", "2021-22", "2020-21"]
+
 
 class Team(Enum):
     HOME = 0
@@ -37,7 +40,8 @@ class GamePlan:
 
 
 class LockerRoom:
-    def __init__(self, game_details: dict, features: list, season=current_season):
+    def __init__(self, game_details: dict, features: list,
+                 fetch_new_data: bool):
         """
         Initialize the Locker Room
 
@@ -49,19 +53,18 @@ class LockerRoom:
         :param nn_config: _description_, defaults to None
         :param season: _description_, defaults to "2022-23"
         """
-        self.seasons = ["2022-23", "2021-22", "2020-21"]
-        self.current_season = season
+        self.overwrite = game_details["new_game"]
 
         self.home_team = game_details["home_team"]
         self.away_team = game_details["away_team"]
         self.game_date = game_details["game_date"]
 
         self.predictors_plus_label = features
-        self.nba_teams_info = pd.read_csv("data/static_data/static_team_info.csv")
+        self.nba_teams_info = nba_teams_info
 
-        self._fetch_teams_data()
+        self._fetch_teams_data(fetch_new_data)
 
-    def _fetch_teams_data(self):
+    def _fetch_teams_data(self, fetch_new_data: bool):
         """
         Fetch the data needed for each team & create/update active players json
         """
@@ -80,10 +83,8 @@ class LockerRoom:
         self.home_away_dict = {self.home_team: Team.HOME, self.away_team: Team.AWAY}
 
         self._set_game_plan()
-        self._fetch_all_logs()
+        self._fetch_all_logs(fetch_new_data)
 
-        # self.home_game_plan.team_game_logs = self.fetch_team_game_logs(home_lookup_values)
-        # self.away_game_plan.team_game_logs = self.fetch_team_game_logs(away_lookup_values)
 
     def _set_game_plan(self):
         """
@@ -97,11 +98,15 @@ class LockerRoom:
         else:
             raise ValueError("Aborting program!")         
     
-    def _fetch_all_logs(self):
+    def _fetch_all_logs(self, fetch_new_data: bool):
         """_summary_
 
         :return: _description_
         """
+        if fetch_new_data:
+            update_data([current_season])
+            concat_all_logs(collected_seasons)
+
         self.all_logs = pd.read_csv("data/all_logs.csv", index_col=0)
         self.all_logs["GAME_DATE"] = pd.to_datetime(self.all_logs["GAME_DATE"])
 
@@ -141,7 +146,7 @@ class LockerRoom:
 
         team_id = self.fetch_teams_id(team_lookup_tuple)
         team_roster = commonteamroster.CommonTeamRoster(team_id=team_id,
-                                                        season=self.current_season).get_data_frames()[0][["PLAYER", "PLAYER_ID"]]
+                                                        season=current_season).get_data_frames()[0][["PLAYER", "PLAYER_ID"]]
         
         return team_roster
 
@@ -185,13 +190,13 @@ class LockerRoom:
         with open(path) as f:
             prereq_json = json.load(f)
 
-        # Refreshes the file & overwrite
-        for team_name in prereq_json:
-            del team_name
-
-        prereq_json = self._init_rerequisite_jsons()
-        with open(path, 'w') as f:
-            json.dump(prereq_json, f, indent=1)
+        if self.overwrite:
+            # Refreshes the file & overwrite
+            for team_name in prereq_json:
+                del team_name
+            prereq_json = self._init_rerequisite_jsons()
+            with open(path, 'w') as f:
+                json.dump(prereq_json, f, indent=1)
 
     def _check_requisite_jsons(self, json_path: str):
         """
@@ -234,7 +239,7 @@ class LockerRoom:
         :return filtered_log.values: an array of player's game logs filtered by specific columns
         """
         all_logs = pd.DataFrame([])
-        for season in self.seasons:
+        for season in collected_seasons:
             try:
                 players_game_logs_df = self.fetch_players_game_logs_df(players_id, season)
                 all_logs = pd.concat([all_logs, players_game_logs_df])
@@ -390,7 +395,7 @@ class LockerRoom:
         path = "data/seasonal_data"
         game_logs_by_year = []
 
-        for season in self.seasons:
+        for season in collected_seasons:
             season_year = f"20{season[-2:]}"
             game_log = pd.read_csv(f"{path}/{season_year}/team_logs/{team_abbreviation}.csv", index_col=0)
             game_logs_by_year.append(game_log)

@@ -30,22 +30,24 @@ class NeuralNet:
         self.input_shape = nn_config["input_shape"]
         self.activation_func = nn_config["activation_func"]
         self.output_activation_func = nn_config["output_activation_func"]
+        self.verbose = nn_config["verbose"]
         self.model = self.compile_model(nn_config["learning_rate"], nn_config["loss_function"],
                                         nn_config["optimizer_function"], nn_config["metrics"])
 
     def create_sequential_nn(self):
         model = Sequential()
-        model.add(Dense(128, activation=self.activation_func, input_shape=(self.input_shape, )))
-        model.add(Dense(81, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(2e-3)))
-        model.add(Dropout(0.13)) # Nash
-        model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(1e-3)))
+        model.add(Dense(100, activation=self.activation_func, input_shape=(self.input_shape, )))
+        model.add(Dense(100, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(2e-3)))
+        model.add(Dense(100, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(3e-3)))
         model.add(Dropout(0.20)) # Ray Allen
+        model.add(Dense(100, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(1e-3)))
+        model.add(Dense(81, activation=self.activation_func, batch_size=32)) # Kobe
         model.add(Dense(1, activation=self.output_activation_func))
 
         return model
 
-    def compile_model(self, learning_rate: float, loss_function: losses,
-                      optimizer_function: tf.keras.optimizers, metrics: str):
+    def compile_model(self, learning_rate: float, loss_function: str,
+                      optimizer_function: str, metrics: str):
         """
         Creates and compiles the model given set parameters
         """
@@ -70,8 +72,8 @@ class NeuralNet:
         Function to fit the model
         """
         if callback is None:
-            callback = EarlyStopping(monitor="loss", min_delta=1e-6, patience=20)
+            callback = EarlyStopping(monitor="val_loss", min_delta=1e-8, patience=20)
 
         x_train, y_train = training_set
         self.model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs,
-                       callbacks=[callback], verbose=0, validation_split=validation_split)
+                       callbacks=[callback], verbose=self.verbose, validation_split=validation_split)

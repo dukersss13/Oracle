@@ -3,12 +3,10 @@ from typing import Tuple
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import pandas as pd
-from time import time
-from sklearn.metrics import mean_absolute_percentage_error
 
 from data_prep.locker_room import LockerRoom, Team
 from models.neural_networks import MODELS, NeuralNet
-from models.ml_models import XGBoost, SupportVectorRegression
+from models.ml_models import XGBoost
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 
@@ -21,12 +19,12 @@ class Oracle:
         :param oracle_config: _description_
         :param nn_config: _description_
         """
-        self.time_elapsed: int = 0
         self.model_config: dict = model_config
         self.game_date: str = game_details["game_date"]
         self.oracle_config = oracle_config
 
-        self.locker_room = LockerRoom(game_details, oracle_config["features"])
+        self.locker_room = LockerRoom(game_details, oracle_config["features"],
+                                      oracle_config["fetch_new_data"])
         self.set_oracle_config(oracle_config)
 
     def set_oracle_config(self, oracle_config: dict):
@@ -40,7 +38,6 @@ class Oracle:
         self.output_path: str = oracle_config["output_path"]
         self.scaling_method: str = oracle_config["scaling_method"]
         self.holdout: bool = oracle_config["holdout"]
-        self.timer: bool = oracle_config["timer"]
 
         model = oracle_config["model"].upper()
 
@@ -87,9 +84,9 @@ class Oracle:
         cols_to_drop = ["GAME_DATE_x", "FGM", "FG3M_x", "FTM"]
         x_train, y_train = player_game_logs.iloc[1:, :-1].drop(cols_to_drop, axis=1), player_game_logs.iloc[1:, -1]
 
-        x_train = self.scale_input(x_train.values.astype(np.float32)) 
+        x_train = self.scale_input(x_train.values.astype(np.float64)) 
 
-        return x_train, y_train.values.astype(np.float32)
+        return x_train, y_train.values.astype(np.float64)
 
     def prepare_testing_data(self, player_game_logs: pd.DataFrame, most_recent_game_date: pd.Timestamp, team: Team) -> np.ndarray:
         """
@@ -134,7 +131,7 @@ class Oracle:
         Get pct x / y
         """
         if y > 0.0:
-            pct = np.float64(x / y)
+            pct = np.float32(x / y)
         else:
             pct = 0.0
         
@@ -164,9 +161,6 @@ class Oracle:
         elif self.model == MODELS.XGBOOST:
             forecasted_points = self.run_xgboost_model(training_data, x_test)
         
-        elif self.model == MODELS.SVR:
-            forecasted_points = self.run_svr_model(training_data, x_test)
-        
         return max([round(forecasted_points), 0])
 
     def run_neural_network(self, training_data: Tuple[np.ndarray, np.ndarray], x_test: np.ndarray) -> float:
@@ -180,7 +174,7 @@ class Oracle:
         players_trained_model.fit_model(training_data, batch_size=32,
                                         epochs=self.model_config["epochs"], 
                                         validation_split=self.model_config["validation_split"])
-        forecasted_points = players_trained_model.model.predict(x_test.astype(np.float32))[0][0]
+        forecasted_points = players_trained_model.model.predict(x_test.astype(np.float64))[0][0]
 
         return forecasted_points
 
@@ -194,16 +188,6 @@ class Oracle:
 
         xgb_model = XGBoost(self.model_config, training_data, validation_data)
         forecasted_points = xgb_model.xgb_predict(x_test)
-
-        return forecasted_points
-
-    @staticmethod
-    def run_svr_model(training_data: np.ndarray, x_test: np.ndarray) -> float:
-        """
-        Wrapper function to init, train & predict with SVR
-        """
-        svr_model = SupportVectorRegression(training_data)
-        forecasted_points = svr_model.svr_predict(x_test)
 
         return forecasted_points
 
@@ -224,9 +208,6 @@ class Oracle:
         players_done = 0
 
         print(f"\nStarting forecast for the {data.team_name}")
-        if self.timer:
-            print("Starting timer")
-            start = time()
 
         for players_name, players_id in data.active_players.iterrows():
             print(f"\nFetching game logs for: {players_name}")
@@ -241,11 +222,6 @@ class Oracle:
             print(f"Finished forecasting for: {players_name}")
             print(f"\n{players_done}/{total_players} players done for the {data.team_name}")
 
-        if self.timer:
-            print("Ending timer")
-            end = time()
-        
-        self.time_elapsed = round((end - start) / 60)
         forecast_df = self.form_forecast_df(forecast_dict)
 
         return forecast_df
@@ -323,10 +299,8 @@ class Oracle:
         home_team_forecast_df = self.get_team_forecast(Team.HOME)
         away_team_forecast_df = self.get_team_forecast(Team.AWAY)
         
-        home_team_mape = mean_absolute_percentage_error([home_team_forecast_df.iloc[-1, 1]], [home_team_forecast_df.iloc[-1, 2]])
-        away_team_mape = mean_absolute_percentage_error([away_team_forecast_df.iloc[-1, 1]], [away_team_forecast_df.iloc[-1, 2]])
-        print(f"Home MAPE: {home_team_mape}")
-        print(f"Away MAPE: {away_team_mape}")
+        print(home_team_forecast_df)
+        print(away_team_forecast_df)
 
         if self.save_output:
             print("Saving output files")

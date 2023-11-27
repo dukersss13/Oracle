@@ -1,11 +1,38 @@
 import os
 import pandas as pd
 
-from nba_api.stats.endpoints import teamgamelogs
-
+from nba_api.stats.endpoints import teamgamelogs, leaguedashptteamdefend, teamestimatedmetrics
 
 nba_teams_info = pd.read_csv("data/static_data/static_team_info.csv", index_col=0)
-seasons = ["2020-21", "2021-22", "2022-23"]
+
+
+def fetch_defensive_stats(seasons: list[str], season_segment=None):
+    """_summary_
+
+    :param team_id: _description_
+    :param season: _description_
+    """
+    defense_categories = ["Overall", "3 Pointers", "2 Pointers", "Less Than 10Ft"]
+    for season in seasons:
+        data_path = f"data/seasonal_data/20{season[-2:]}/defensive_data"
+        for category in defense_categories:
+            team_defensive_stats: pd.DataFrame = leaguedashptteamdefend.LeagueDashPtTeamDefend(season=season,
+                                                                                               defense_category=category,
+                                                                                 season_segment_nullable=season_segment).get_data_frames()[0]
+            if not os.path.exists(data_path):
+                os.makedirs(data_path)
+
+            if season_segment == "Post All-Star":
+                file_name = f"post_asb_{category}.csv"
+            else:
+                file_name = f"pre_asb_{category}.csv"
+            
+            team_defensive_stats.to_csv(f"{data_path}/{file_name}")
+        
+        if not os.path.exists(f"{data_path}/overall_defensive_metrics_{season[-2:]}.csv"):
+            team_overall_defensive_metrics: pd.DataFrame = teamestimatedmetrics.TeamEstimatedMetrics(season=season).get_data_frames()[0]
+            team_overall_defensive_metrics = team_overall_defensive_metrics[["TEAM_ID", "E_PACE", "E_DEF_RATING"]]
+            team_overall_defensive_metrics.to_csv(f"{data_path}/overall_defensive_metrics_{season[-2:]}.csv")
 
 
 def fetch_team_game_logs(team_id: str, season: str):
@@ -28,10 +55,17 @@ def save_teams_logs_per_season(seasons: list):
     :param seasons: list of season(s) of the games to save
     """
     for season in seasons:
+        path = f"data/seasonal_data/20{season[-2:]}/team_logs"
         for team_id in nba_teams_info["id"]:
             team_game_logs = fetch_team_game_logs(team_id, season)
-            team_game_logs = team_game_logs[["SEASON_YEAR", "TEAM_ABBREVIATION", "TEAM_NAME", "GAME_ID", "GAME_DATE", "MATCHUP"]]
-            team_game_logs.to_csv(f"data/seasonal_data/20{season[-2:]}/team_logs/{team_game_logs['TEAM_ABBREVIATION'].values[0]}.csv")
+            team_game_logs: pd.DataFrame = team_game_logs[["SEASON_YEAR", "TEAM_ABBREVIATION", "TEAM_NAME",
+                                                           "GAME_ID", "GAME_DATE", "MATCHUP"]]
+
+            if not os.path.exists(path):
+                os.makedirs(path)
+
+            team_game_logs.to_csv(f"{path}/{team_game_logs['TEAM_ABBREVIATION'].values[0]}.csv")
+                
 
 def get_opp_id(matchup: str):
     """
@@ -43,8 +77,8 @@ def get_opp_id(matchup: str):
     
     return team_id
 
-def merge_defensive_stats(season: str, game_log: pd.DataFrame, pre_asb_stats: list,
-                          post_asb_stats: list, metrics: pd.DataFrame=None) -> pd.DataFrame:
+def merge_defensive_stats(season: str, game_log: pd.DataFrame, pre_asb_stats: list = [],
+                          post_asb_stats: list = [], metrics: pd.DataFrame=None) -> pd.DataFrame:
     """
     Merge the necessary defensive stats to current team game logs
     The stats are separated by the All Star Break (ASB) date
@@ -66,10 +100,15 @@ def merge_defensive_stats(season: str, game_log: pd.DataFrame, pre_asb_stats: li
     
     pre_asb = game_log.copy()
     for defensive_stats in pre_asb_stats:
+        col_to_drop = [col for col in defensive_stats.columns if "PLUSMINUS" in col]
+        defensive_stats: pd.DataFrame = defensive_stats.drop(columns=["TEAM_NAME", "TEAM_ABBREVIATION", "FREQ",
+                                                                      "GP", "G"] + col_to_drop)
         pre_asb = pre_asb[pre_asb["GAME_DATE"] < all_star_date].merge(defensive_stats, on="TEAM_ID")
     
     post_asb = game_log.copy()
     for defensive_stats in post_asb_stats:
+        defensive_stats: pd.DataFrame = defensive_stats.drop(columns=["TEAM_NAME", "TEAM_ABBREVIATION", "FREQ",
+                                                                      "GP", "G", "PLUSMINUS"])
         post_asb = post_asb[post_asb["GAME_DATE"] >= all_star_date].merge(defensive_stats, on="TEAM_ID")
     
     complete_log = pd.concat([pre_asb, post_asb]).merge(metrics, on="TEAM_ID")
@@ -108,19 +147,24 @@ def merge_defensive_stats_to_game_logs(seasons: list):
             complete_log = merge_defensive_stats(season, team_logs_data, pre_asb_data, post_asb_data, metrics)
             complete_log.to_csv(f"{team_logs_path}")
 
-# def concat_all_logs(seasons: list):
-#     """_summary_
+def concat_all_logs(seasons: list):
+    """_summary_
 
-#     :param seasons: _description_
-#     """
-#     team_logs = []
-#     for season in seasons:
-#         dir = f"data/seasonal_data/20{season[-2:]}/team_logs"
-#         team_file = pd.read_csv(f"{dir}/all_logs.csv", index_col=0)
-#         team_logs.append(team_file)
+    :param seasons: _description_
+    """
+    team_logs = []
+    for season in seasons:
+        dir = f"data/seasonal_data/20{season[-2:]}/team_logs"
+        team_file = pd.read_csv(f"{dir}/all_logs.csv", index_col=0)
+        team_logs.append(team_file)
     
-#     all_logs = pd.concat(team_logs, axis=0)
-#     all_logs.to_csv(f"data/all_logs.csv")
+    all_logs = pd.concat(team_logs, axis=0)
+    all_logs.to_csv(f"data/all_logs.csv")
 
-# save_teams_logs_per_season(seasons)
-# merge_defensive_stats_to_game_logs(seasons)
+seasons = ["2023-24"]
+
+def update_data(seasons: list):
+    save_teams_logs_per_season(seasons)
+    fetch_defensive_stats(seasons, season_segment="Pre All-Star")
+    merge_defensive_stats_to_game_logs(seasons)
+
