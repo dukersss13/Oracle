@@ -1,6 +1,5 @@
 import numpy as np
 import xgboost as xgb
-from sklearn.svm import SVR
 
 
 class XGBoost:
@@ -49,31 +48,3 @@ class XGBoost:
         xgb_prediction = self.xgboost_model.predict(xgb.DMatrix(x_test))[0]
 
         return xgb_prediction
-
-
-class SupportVectorRegression:
-    def __init__(self, training_data: tuple):
-        """_summary_
-
-        :param model_config: _description_
-        :param training_data: _description_
-        """
-        self.svr_model: SVR = self.create_SVR_model(training_data)
-
-    @staticmethod
-    def create_SVR_model(training_data: np.ndarray):
-        """
-        _summary_
-        """
-        svr_model = SVR(kernel="rbf", C=1e3, gamma=0.1)
-        X, y = training_data
-        
-        return svr_model.fit(X, y)
-    
-    def svr_predict(self, x_test: np.ndarray) -> float:
-        """_summary_
-
-        :param x_test: _description_
-        :return: _description_
-        """
-        return self.svr_model.predict(x_test)[0]

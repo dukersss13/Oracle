@@ -2,11 +2,10 @@ from enum import Enum
 from typing import Tuple
 
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras import Sequential, regularizers, losses
-from tensorflow.keras.layers import Dense, Dropout
-from tensorflow.keras.optimizers import SGD, Adam
-from tensorflow.keras.callbacks import EarlyStopping
+from keras import Sequential, regularizers, losses
+from keras.layers import Dense, Dropout
+from keras.optimizers import SGD, Adam
+from keras.callbacks import EarlyStopping
 
 
 class MODELS(Enum):
@@ -72,7 +71,7 @@ class NeuralNet:
         Function to fit the model
         """
         if callback is None:
-            callback = EarlyStopping(monitor="val_loss", min_delta=1e-8, patience=20)
+            callback = EarlyStopping(monitor="val_loss", min_delta=1e-6, patience=20, restore_best_weights=True)
 
         x_train, y_train = training_set
         self.model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs,

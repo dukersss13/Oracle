@@ -7,11 +7,10 @@ from enum import Enum
 from tensorflow import one_hot
 from dataclasses import dataclass
 
-from data_prep.gamelogs import update_data, concat_all_logs, nba_teams_info
+from data_prep.gamelogs import update_data, consolidate_all_game_logs, nba_teams_info
 from nba_api.stats.endpoints import (playergamelog, boxscoretraditionalv2,
                                      commonteamroster)
 from nba_api.stats.static import  players
-
 
 pd.set_option('mode.chained_assignment', None)
 pd.set_option('display.max_columns', None)
@@ -20,13 +19,10 @@ pd.set_option('display.max_columns', None)
 current_season = "2023-24"
 collected_seasons = ["2023-24", "2022-23", "2021-22", "2020-21"]
 
-
 class Team(Enum):
     HOME = 0
     AWAY = 1
 
-class JsonType(Enum):
-    ACTIVE_PLAYERS = 1
 
 @dataclass
 class GamePlan:
@@ -105,7 +101,7 @@ class LockerRoom:
         """
         if fetch_new_data:
             update_data([current_season])
-            concat_all_logs(collected_seasons)
+            consolidate_all_game_logs(collected_seasons)
 
         self.all_logs = pd.read_csv("data/all_logs.csv", index_col=0)
         self.all_logs["GAME_DATE"] = pd.to_datetime(self.all_logs["GAME_DATE"])
@@ -157,7 +153,7 @@ class LockerRoom:
         :param players_game_logs_df: player's game logs df
         :return: the date of their most recent game
         """
-        most_recent_game_date = players_game_logs_df["GAME_DATE_x"].values[0]
+        most_recent_game_date = players_game_logs_df["GAME_DATE_player"].values[0]
 
         return most_recent_game_date
 
@@ -292,7 +288,9 @@ class LockerRoom:
         """
         players_game_log = players_game_log.rename(columns={"Game_ID": "GAME_ID"})
         players_game_log["GAME_ID"] = players_game_log["GAME_ID"].astype(np.int64)
-        log_with_defensive_stats = players_game_log.merge(self.all_logs, how="left", on=["GAME_ID", "TEAM_ID"])
+        log_with_defensive_stats = players_game_log.merge(self.all_logs, how="left", 
+                                                          on=["GAME_ID", "TEAM_ID"],
+                                                          suffixes=["_player", "_opp_defense"])
 
         return log_with_defensive_stats
 

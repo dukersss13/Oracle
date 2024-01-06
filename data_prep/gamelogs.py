@@ -54,6 +54,7 @@ def save_teams_logs_per_season(seasons: list):
 
     :param seasons: list of season(s) of the games to save
     """
+    print(f"Fetching new game logs for {seasons}")
     for season in seasons:
         path = f"data/seasonal_data/20{season[-2:]}/team_logs"
         for team_id in nba_teams_info["id"]:
@@ -66,7 +67,6 @@ def save_teams_logs_per_season(seasons: list):
 
             team_game_logs.to_csv(f"{path}/{team_game_logs['TEAM_ABBREVIATION'].values[0]}.csv")
                 
-
 def get_opp_id(matchup: str):
     """
     Fetch opponent's ID when looking at the matchup
@@ -105,11 +105,14 @@ def merge_defensive_stats(season: str, game_log: pd.DataFrame, pre_asb_stats: li
                                                                       "GP", "G"] + col_to_drop)
         pre_asb = pre_asb[pre_asb["GAME_DATE"] < all_star_date].merge(defensive_stats, on="TEAM_ID")
     
-    post_asb = game_log.copy()
-    for defensive_stats in post_asb_stats:
-        defensive_stats: pd.DataFrame = defensive_stats.drop(columns=["TEAM_NAME", "TEAM_ABBREVIATION", "FREQ",
-                                                                      "GP", "G", "PLUSMINUS"])
-        post_asb = post_asb[post_asb["GAME_DATE"] >= all_star_date].merge(defensive_stats, on="TEAM_ID")
+    if len(post_asb_stats):
+        post_asb = game_log.copy()
+        for defensive_stats in post_asb_stats:
+            defensive_stats: pd.DataFrame = defensive_stats.drop(columns=["TEAM_NAME", "TEAM_ABBREVIATION", "FREQ",
+                                                                        "GP", "G", "PLUSMINUS"])
+            post_asb = post_asb[post_asb["GAME_DATE"] >= all_star_date].merge(defensive_stats, on="TEAM_ID")
+    else:
+        post_asb = pd.DataFrame([])
     
     complete_log = pd.concat([pre_asb, post_asb]).merge(metrics, on="TEAM_ID")
     complete_log = complete_log.sort_values(by=["GAME_DATE"], ascending=False)
@@ -122,9 +125,9 @@ def merge_defensive_stats_to_game_logs(seasons: list):
 
     :param seasons: _description_
     """
+    print("Merging defensive data to game logs")
     for season in seasons:
         dir = f"data/seasonal_data/20{season[-2:]}"
-
         for team_abb in nba_teams_info["abbreviation"]:
             defense_data_dir = f"{dir}/defensive_data"
             team_logs_dir = f"{dir}/team_logs"
@@ -147,24 +150,29 @@ def merge_defensive_stats_to_game_logs(seasons: list):
             complete_log = merge_defensive_stats(season, team_logs_data, pre_asb_data, post_asb_data, metrics)
             complete_log.to_csv(f"{team_logs_path}")
 
-def concat_all_logs(seasons: list):
-    """_summary_
 
-    :param seasons: _description_
+def consolidate_all_game_logs(seasons: list):
     """
-    team_logs = []
+    Consolidate all the logs into 1
+    across ALL collected seasons
+    """
+    print(f"Adding new game logs from {seasons} to all_logs.csv")
+    all_logs = []
     for season in seasons:
+        season_team_logs = []
         dir = f"data/seasonal_data/20{season[-2:]}/team_logs"
-        team_file = pd.read_csv(f"{dir}/all_logs.csv", index_col=0)
-        team_logs.append(team_file)
-    
-    all_logs = pd.concat(team_logs, axis=0)
+        for filename in os.listdir(dir):
+            team_log = pd.read_csv(f"{dir}/{filename}", index_col=0)
+            season_team_logs.append(team_log)
+        season_team_logs = pd.concat(season_team_logs, axis=0)
+        season_team_logs.to_csv(f"{dir}/team_logs.csv")
+        all_logs.append(season_team_logs)
+
+    all_logs = pd.concat(all_logs, axis=0)
     all_logs.to_csv(f"data/all_logs.csv")
 
-seasons = ["2023-24"]
 
 def update_data(seasons: list):
     save_teams_logs_per_season(seasons)
     fetch_defensive_stats(seasons, season_segment="Pre All-Star")
     merge_defensive_stats_to_game_logs(seasons)
-

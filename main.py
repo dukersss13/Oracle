@@ -12,6 +12,8 @@ if __name__ == '__main__':
 
 
 # TODO
-# CONCAT ALL LOGS TO MERGE DEFENSIVE STATS PER PLAYER
 # If player's avg mins =< 5, don't play them
-# Fix Neural Network
+# Fix Neural Network 
+# Forecast Player's Attempts using Minutes
+# attempts = f(minutes) & % = f(opp_defense) & pts = f(attempts, %)
+# Build GRU/LSTM

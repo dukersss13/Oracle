@@ -81,7 +81,7 @@ class Oracle:
         :param player_game_logs: game logs of individual player
         :return: training predictors & outputs
         """
-        cols_to_drop = ["GAME_DATE_x", "FGM", "FG3M_x", "FTM"]
+        cols_to_drop = ["GAME_DATE_player", "FGM", "FG3M_player", "FTM"]
         x_train, y_train = player_game_logs.iloc[1:, :-1].drop(cols_to_drop, axis=1), player_game_logs.iloc[1:, -1]
 
         x_train = self.scale_input(x_train.values.astype(np.float64)) 
@@ -102,23 +102,23 @@ class Oracle:
         rest_days = (pd.Timestamp(self.game_date) - most_recent_game_date).days
 
         # Take the MA for [MIN, FGA, FG3A_x, FTA]
-        x_test_statistics = player_game_logs[["MIN", "FGA", "FG3A_x", "FTA"]].iloc[1:ma_degree, :].mean().values
+        x_test_statistics = player_game_logs[["MIN", "FGA", "FG3A_player", "FTA"]].iloc[1:ma_degree, :].mean().values
         test_fg_pct = Oracle.get_pct(player_game_logs["FGM"].values[:ma_degree].sum(), 
                                      player_game_logs["FGA"].values[:ma_degree].sum())
         x_test_statistics = np.insert(x_test_statistics, 2, test_fg_pct)
 
-        test_3fg_pct = Oracle.get_pct(player_game_logs["FG3M_x"].values[:ma_degree].sum(),
-                                      player_game_logs["FG3A_x"].values[:ma_degree].sum())
+        test_3fg_pct = Oracle.get_pct(player_game_logs["FG3M_player"].values[:ma_degree].sum(),
+                                      player_game_logs["FG3A_player"].values[:ma_degree].sum())
         x_test_statistics = np.insert(x_test_statistics, 4, test_3fg_pct)
 
         test_ft_pct = Oracle.get_pct(player_game_logs["FTM"].values[:ma_degree].sum(),
                                      player_game_logs["FTA"].values[:ma_degree].sum())
         x_test_statistics = np.insert(x_test_statistics, 6, test_ft_pct)
 
-        x_test_defense = player_game_logs[["D_FGM", "D_FGA", "D_FG_PCT", "PCT_PLUSMINUS",
-                                           "FG3M_y", "FG3A_y", "FG3_PCT_y", "NS_FG3_PCT", "PLUSMINUS_x",
-                                           "FG2M", "FG2A", "FG2_PCT", "NS_FG2_PCT", "PLUSMINUS_y",
-                                           "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT", "PLUSMINUS",
+        x_test_defense = player_game_logs[["D_FGM", "D_FGA", "D_FG_PCT",
+                                           "FG3M_opp_defense", "FG3A_opp_defense", "FG3_PCT_opp_defense", "NS_FG3_PCT",
+                                           "FG2M", "FG2A", "FG2_PCT", "NS_FG2_PCT",
+                                           "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT",
                                            "E_PACE", "E_DEF_RATING"]].iloc[1, :].values
 
         x_test = np.concatenate([x_test_statistics, [rest_days], home_or_away, x_test_defense])
@@ -140,7 +140,7 @@ class Oracle:
     def get_players_forecast(self, players_full_name: str, filtered_players_logs: pd.DataFrame, team: Team) -> int:
         """
         """
-        if filtered_players_logs.empty:
+        if filtered_players_logs.empty or filtered_players_logs["MIN"].values[:3].mean() <= 5:
             return 0
 
         elif filtered_players_logs.shape[0] < 15:
@@ -157,7 +157,6 @@ class Oracle:
         print(f"Training for: {players_full_name}")
         if self.model == MODELS.SEQUENTIAL:
             forecasted_points = self.run_neural_network(training_data, x_test)
-        
         elif self.model == MODELS.XGBOOST:
             forecasted_points = self.run_xgboost_model(training_data, x_test)
         
@@ -174,7 +173,7 @@ class Oracle:
         players_trained_model.fit_model(training_data, batch_size=32,
                                         epochs=self.model_config["epochs"], 
                                         validation_split=self.model_config["validation_split"])
-        forecasted_points = players_trained_model.model.predict(x_test.astype(np.float64))[0][0]
+        forecasted_points = players_trained_model.model.predict(x_test.astype(np.float32))[0][0]
 
         return forecasted_points
 
