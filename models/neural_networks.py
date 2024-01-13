@@ -1,20 +1,11 @@
-from enum import Enum
 from typing import Tuple
 
 import numpy as np
 from keras import Sequential, regularizers, losses
-from keras.layers import Dense, Dropout
+from keras.layers import Dense, GRU, Dropout
 from keras.optimizers import SGD, Adam
 from keras.callbacks import EarlyStopping
-
-
-class MODELS(Enum):
-    """
-    Type of ML/NN models
-    """
-    SEQUENTIAL = 0
-    XGBOOST = 1
-    SVR = 2
+import tensorflow as tf
 
 
 class NeuralNet:
@@ -26,22 +17,33 @@ class NeuralNet:
         :param nn_type: type of neural net: Sequential, GRU
         :param config: neural network's configurations
         """
+        self.nn_config = nn_config
         self.input_shape = nn_config["input_shape"]
         self.activation_func = nn_config["activation_func"]
         self.output_activation_func = nn_config["output_activation_func"]
-        self.verbose = nn_config["verbose"]
         self.model = self.compile_model(nn_config["learning_rate"], nn_config["loss_function"],
                                         nn_config["optimizer_function"], nn_config["metrics"])
 
     def create_sequential_nn(self):
         model = Sequential()
-        model.add(Dense(100, activation=self.activation_func, input_shape=(self.input_shape, )))
-        model.add(Dense(100, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(2e-3)))
-        model.add(Dense(100, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(3e-3)))
+        model.add(Dense(128, activation=self.activation_func, input_shape=(self.input_shape, )))
+        model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(2e-3))) # Jordan
         model.add(Dropout(0.20)) # Ray Allen
-        model.add(Dense(100, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(1e-3)))
-        model.add(Dense(81, activation=self.activation_func, batch_size=32)) # Kobe
+        model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(1e-3))) # Nash
+        model.add(Dense(81, activation=self.activation_func, batch_size=24)) # Kobe
         model.add(Dense(1, activation=self.output_activation_func))
+
+        return model
+
+    def create_GRU_nn(self):
+        model = Sequential()
+        model.add(GRU(units=100, activation=self.activation_func, input_shape=(1, self.input_shape)))  # First GRU layer
+        model.add(Dropout(0.20))  # Regularization
+        model.add(GRU(units=128, activation=self.activation_func, return_sequences=True))  # Stacked GRU layer
+        model.add(Dropout(0.20))  # Regularization
+        model.add(GRU(units=100, activation=self.activation_func))  # Final GRU layer
+        model.add(Dense(81, activation=self.activation_func))  # Dense layer before output
+        model.add(Dense(1, activation=self.output_activation_func))  # Output layer
 
         return model
 
@@ -65,14 +67,29 @@ class NeuralNet:
 
         return model
 
-    def fit_model(self, training_set: Tuple[np.ndarray, np.ndarray], batch_size: int, epochs: int,
-                  validation_split: int = 0.15, callback: EarlyStopping = None):
+    @tf.function
+    def predict(self, test_data: np.ndarray) -> float:
         """
-        Function to fit the model
-        """
-        if callback is None:
-            callback = EarlyStopping(monitor="val_loss", min_delta=1e-6, patience=20, restore_best_weights=True)
+        Run prediction
 
-        x_train, y_train = training_set
-        self.model.fit(x_train, y_train, batch_size=batch_size, epochs=epochs,
-                       callbacks=[callback], verbose=self.verbose, validation_split=validation_split)
+        :param test_data: testing input
+        :return: prediction of the points
+        """
+        return self.model.predict(test_data)
+
+    def get_forecast(self, training_data: Tuple[np.ndarray, np.ndarray], x_test: np.ndarray) -> float:
+        """
+        Wrapper function to init, train & predict with a NN
+
+        :param training_data: training data
+        :param x_test: testing input
+        """
+        callback = EarlyStopping(monitor="val_loss", min_delta=1e-6, patience=20, restore_best_weights=True)
+
+        x_train, y_train = training_data
+        self.model.fit(x_train, y_train, batch_size=32, epochs=self.nn_config["epochs"], callbacks=[callback],
+                       verbose=self.nn_config["verbose"], validation_split=self.nn_config["validation_split"])
+
+        forecasted_points = self.model.predict(x_test)[0][0]
+
+        return forecasted_points

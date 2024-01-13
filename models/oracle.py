@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from data_prep.locker_room import LockerRoom, Team
-from models.neural_networks import MODELS, NeuralNet
+from models.neural_networks import NeuralNet
 from models.ml_models import XGBoost
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
@@ -25,15 +25,15 @@ class Oracle:
 
         self.locker_room = LockerRoom(game_details, oracle_config["features"],
                                       oracle_config["fetch_new_data"])
-        self.set_oracle_config(oracle_config)
+        self.setup_oracle(oracle_config)
 
-    def set_oracle_config(self, oracle_config: dict):
+    def setup_oracle(self, oracle_config: dict):
         """
         Set the configuration for Oracle
 
         :param oracle_config: config dict for Oracle
         """
-        self.model = None
+        self.scaler = None
         self.save_output: bool = oracle_config["save_file"]
         self.output_path: str = oracle_config["output_path"]
         self.scaling_method: str = oracle_config["scaling_method"]
@@ -42,11 +42,9 @@ class Oracle:
         model = oracle_config["model"].upper()
 
         if model == "SEQUENTIAL":
-            self.model = MODELS.SEQUENTIAL
+            self.model = NeuralNet(self.model_config)
         elif model == "XGBOOST":
-            self.model = MODELS.XGBOOST
-        elif model == "SVR":
-            self.model = MODELS.SVR
+            self.model = XGBoost(self.model_config)
         else:
             raise NotImplementedError(f"{self.model} is not implemented - select a different model!")
 
@@ -64,15 +62,26 @@ class Oracle:
             raise NotImplementedError(f"Do not recognize {scaling_method} scaling method!")
 
         if scaling_method is None:
-            X_scaled = X
+            return X
         elif scaling_method.lower() == "standard":
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(X)
+            self.scaler = StandardScaler()
         elif scaling_method.lower() == "minmax":
-            scaler = MinMaxScaler()
-            X_scaled = scaler.fit_transform(X)
+            self.scaler = MinMaxScaler()
         
-        return X_scaled
+        return self.scaler.fit_transform(X)
+    
+    def scale_test(self, X_test: np.ndarray) -> np.ndarray:
+        """_summary_
+
+        :param X_test: _description_
+        :return: _description_
+        """
+        if self.scaler is None:
+            X_test = X_test
+        else:
+            X_test = self.scaler.transform(X_test)
+
+        return X_test.astype(np.float32)
 
     def prepare_training_data(self, player_game_logs: np.ndarray) -> tuple:
         """
@@ -84,9 +93,9 @@ class Oracle:
         cols_to_drop = ["GAME_DATE_player", "FGM", "FG3M_player", "FTM"]
         x_train, y_train = player_game_logs.iloc[1:, :-1].drop(cols_to_drop, axis=1), player_game_logs.iloc[1:, -1]
 
-        x_train = self.scale_input(x_train.values.astype(np.float64)) 
+        x_train = self.scale_input(x_train.values.astype(np.float32)) 
 
-        return x_train, y_train.values.astype(np.float64)
+        return x_train, y_train.values.astype(np.float32)
 
     def prepare_testing_data(self, player_game_logs: pd.DataFrame, most_recent_game_date: pd.Timestamp, team: Team) -> np.ndarray:
         """
@@ -139,6 +148,10 @@ class Oracle:
 
     def get_players_forecast(self, players_full_name: str, filtered_players_logs: pd.DataFrame, team: Team) -> int:
         """
+        Get players' forecast
+
+        :param players_full_name: full name of player
+        :param filtered_players_logs: players' game logs
         """
         if filtered_players_logs.empty or filtered_players_logs["MIN"].values[:3].mean() <= 5:
             return 0
@@ -148,47 +161,16 @@ class Oracle:
             print(f"WARNING: Cannot run forecast for {players_full_name}. Will use player's average as forecast")
             return int(filtered_players_logs.iloc[:, -1].mean())
 
+        filtered_players_logs.dropna(inplace=True)
         most_recent_game_date = self.locker_room.get_most_recent_game_date(filtered_players_logs)
         training_data = self.prepare_training_data(filtered_players_logs)
         x_test = self.prepare_testing_data(filtered_players_logs, most_recent_game_date, team)
         x_test = self.assign_player_mins(players_full_name, x_test, team).reshape(1, -1)
-        x_test = self.scale_input(x_test)
+        x_test = self.scale_test(x_test)
 
-        print(f"Training for: {players_full_name}")
-        if self.model == MODELS.SEQUENTIAL:
-            forecasted_points = self.run_neural_network(training_data, x_test)
-        elif self.model == MODELS.XGBOOST:
-            forecasted_points = self.run_xgboost_model(training_data, x_test)
-        
-        return max([round(forecasted_points), 0])
+        forecasted_points = self.model.get_forecast(training_data, x_test)
 
-    def run_neural_network(self, training_data: Tuple[np.ndarray, np.ndarray], x_test: np.ndarray) -> float:
-        """
-        Wrapper function to init, train & predict with a NN
-
-        :param training_data: _description_
-        :param x_test: _description_
-        """
-        players_trained_model = NeuralNet(self.model_config)
-        players_trained_model.fit_model(training_data, batch_size=32,
-                                        epochs=self.model_config["epochs"], 
-                                        validation_split=self.model_config["validation_split"])
-        forecasted_points = players_trained_model.model.predict(x_test.astype(np.float32))[0][0]
-
-        return forecasted_points
-
-    def run_xgboost_model(self, training_data: np.ndarray, x_test: np.ndarray) -> float:
-        """
-        Wrapper function to init, train & predict XGBoost Regressor
-        """
-        split = round(0.1 * len(training_data[0]))
-        training_data = (training_data[0][:-split], training_data[1][:-split])
-        validation_data = (training_data[0][-split:], training_data[1][-split:])
-
-        xgb_model = XGBoost(self.model_config, training_data, validation_data)
-        forecasted_points = xgb_model.xgb_predict(x_test)
-
-        return forecasted_points
+        return int(forecasted_points)
 
     def get_team_forecast(self, team: Team):
         """
@@ -214,6 +196,7 @@ class Oracle:
 
             print(f"Starting forecast for: {players_name}")
             forecasted_points = self.get_players_forecast(players_name, filtered_players_logs, team)
+            print(f"Forecasted points: {forecasted_points}")
             actual_points = filtered_players_logs["PTS"].values[0] if self.holdout else 0
             forecast_dict = Oracle.append_to_forecast_dict(forecast_dict, players_name, forecasted_points, actual_points)
             players_done += 1
