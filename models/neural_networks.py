@@ -48,10 +48,9 @@ class NeuralNet:
         model = Sequential()
         model.add(Input(shape=(1, self.input_shape)))
         model.add(GRU(units=128, activation=self.activation_func, kernel_regularizer=regularizers.l2(2e-3),
-                      unroll=True, return_sequences=True))
+                      dropout=0.1, unroll=True, return_sequences=True))
         model.add(BatchNormalization())
-        model.add(GRU(units=128, activation=self.activation_func, unroll=True))
-        model.add(Dropout(0.20))
+        model.add(GRU(units=128, activation=self.activation_func, batch_size=32, dropout=0.2, unroll=True))
         model.add(Dense(units=128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(1e-3)))
         model.add(Dense(81, activation=self.activation_func, batch_size=24))
         model.add(Dense(1, activation=self.output_activation_func))

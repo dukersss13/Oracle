@@ -1,4 +1,4 @@
-
+*.csv
 artifacts/active_players.json
 artifacts/active_players.json
 artifacts/matchups.json
