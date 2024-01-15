@@ -11,10 +11,10 @@ features = ["MIN", "GAME_DATE_player",
 
 game_details = {"home_team": "Pistons", "away_team": "Rockets", "game_date": "01-12-2024", "new_game": False}
 
-oracle_config = {"model": "Sequential", "features": features, "holdout": False, "MA_degree": 4,
+oracle_config = {"model": "NN", "features": features, "holdout": False, "MA_degree": 4,
                  "scaling_method": "standard", "save_file": True, "output_path": "output", "fetch_new_data": False}
 
-nn_config = {"input_shape": len(features)-5, "output_shape": 1, "validation_split": .10,
+nn_config = {"type": "GRU","input_shape": len(features)-5, "output_shape": 1, "validation_split": .10,
              "activation_func": "relu", "learning_rate": 3e-3, "output_activation_func": "relu", "verbose": 0,
              "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 500}
 

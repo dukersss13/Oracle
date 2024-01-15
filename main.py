@@ -11,6 +11,5 @@ if __name__ == '__main__':
     print(f"Total solve time E2E: {round((end-start) / 60)} minutes")
 
 # TODO
-# Build GRU/LSTM
 # Forecast Player's Attempts using Minutes
 # attempts = f(minutes) & % = f(opp_defense) & pts = f(attempts, %)

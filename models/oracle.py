@@ -41,7 +41,7 @@ class Oracle:
 
         model = oracle_config["model"].upper()
 
-        if model == "SEQUENTIAL":
+        if model == "NN":
             self.model = NeuralNet(self.model_config)
         elif model == "XGBOOST":
             self.model = XGBoost(self.model_config)
@@ -153,7 +153,7 @@ class Oracle:
         :param players_full_name: full name of player
         :param filtered_players_logs: players' game logs
         """
-        if filtered_players_logs.empty or filtered_players_logs["MIN"].values[:3].mean() <= 5:
+        if filtered_players_logs.empty or filtered_players_logs["MIN"].values[:3].mean() <= 8:
             return 0
 
         elif filtered_players_logs.shape[0] < 15:
