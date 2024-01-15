@@ -32,7 +32,7 @@ class NeuralNet:
         
         return model
 
-    def _create_sequential_nn(self):
+    def _create_sequential_nn(self) -> Sequential:
         model = Sequential()
         model.add(Input(shape=(self.input_shape, )))
         model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(2e-3))) # Jordan
@@ -44,17 +44,17 @@ class NeuralNet:
 
         return model
 
-    def _create_GRU_nn(self):
+    def _create_GRU_nn(self) -> Sequential:
         model = Sequential()
-        model.add(Input(shape=(1, self.input_shape)))  # First GRU layer
+        model.add(Input(shape=(1, self.input_shape)))
         model.add(GRU(units=128, activation=self.activation_func, kernel_regularizer=regularizers.l2(2e-3),
                       unroll=True, return_sequences=True))
         model.add(BatchNormalization())
         model.add(GRU(units=128, activation=self.activation_func, unroll=True))
-        model.add(Dropout(0.20))  # Regularization
+        model.add(Dropout(0.20))
         model.add(Dense(units=128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(1e-3)))
-        model.add(Dense(81, activation=self.activation_func, batch_size=24))  # Dense layer before output
-        model.add(Dense(1, activation=self.output_activation_func))  # Output layer
+        model.add(Dense(81, activation=self.activation_func, batch_size=24))
+        model.add(Dense(1, activation=self.output_activation_func))
 
         return model
 
