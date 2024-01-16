@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Tuple
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -71,10 +72,8 @@ class Oracle:
         return self.scaler.fit_transform(X)
     
     def scale_test(self, X_test: np.ndarray) -> np.ndarray:
-        """_summary_
-
-        :param X_test: _description_
-        :return: _description_
+        """
+        Scale the testing inputs
         """
         if self.scaler is None:
             X_test = X_test
@@ -272,6 +271,13 @@ class Oracle:
         with pd.ExcelWriter(f"{output_path}/Forecast.xlsx") as writer:
             home_team_forecast_df.to_excel(writer, sheet_name=f"{self.locker_room.home_team} Forecast", index=False)
             away_team_forecast_df.to_excel(writer, sheet_name=f"{self.locker_room.away_team} Forecast", index=False)
+        
+        print("Saving config files")
+        with open(f"{output_path}/oracle_config.json", "w") as json_file:
+            json.dump(self.oracle_config, json_file, indent=2)
+
+        with open(f"{output_path}/model_config.json", "w") as json_file:
+            json.dump(self.model_config, json_file, indent=2)
 
     def run(self):
         """
