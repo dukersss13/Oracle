@@ -35,9 +35,9 @@ class NeuralNet:
     def _create_sequential_nn(self) -> Sequential:
         model = Sequential()
         model.add(Input(shape=(self.input_shape, )))
-        model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(2e-3))) # Jordan
+        model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(3e-3)))
         model.add(BatchNormalization())
-        model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(1e-3))) # Nash
+        model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(1e-3))) # Nash
         model.add(Dropout(0.20)) # Ray Allen
         model.add(Dense(81, activation=self.activation_func, batch_size=24)) # Kobe
         model.add(Dense(1, activation=self.output_activation_func))
@@ -47,11 +47,11 @@ class NeuralNet:
     def _create_GRU_nn(self) -> Sequential:
         model = Sequential()
         model.add(Input(shape=(1, self.input_shape)))
-        model.add(GRU(units=128, activation=self.activation_func, kernel_regularizer=regularizers.l2(2e-3),
-                      dropout=0.2, unroll=True, return_sequences=True))
+        model.add(GRU(units=128, activation=self.activation_func, kernel_regularizer=regularizers.l1(3e-3),
+                      dropout=0.1, unroll=True, return_sequences=True))
         model.add(BatchNormalization())
         model.add(GRU(units=128, activation=self.activation_func, batch_size=32, dropout=0.2, unroll=True))
-        model.add(Dense(units=128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(1e-3)))
+        model.add(Dense(units=128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(1e-3)))
         model.add(Dense(81, activation=self.activation_func, batch_size=24))
         model.add(Dense(1, activation=self.output_activation_func))
 
@@ -78,14 +78,14 @@ class NeuralNet:
         return model
 
     @tf.function
-    def predict(self, test_data: np.ndarray) -> float:
+    def predict(self, x_test: np.ndarray) -> float:
         """
         Run prediction
 
         :param test_data: testing input
         :return: prediction of the points
         """
-        return self.model.predict(test_data)
+        return self.model.predict(x_test)
 
     def get_forecast(self, training_data: Tuple[np.ndarray, np.ndarray], x_test: np.ndarray) -> float:
         """
@@ -101,7 +101,7 @@ class NeuralNet:
             x_train = x_train.reshape(x_train.shape[0], 1, x_train.shape[1])
             x_test = x_test.reshape(x_test.shape[0], 1, x_test.shape[1])
 
-        self.model.fit(x_train, y_train, batch_size=24, epochs=self.nn_config["epochs"], callbacks=[callback],
+        self.model.fit(x_train, y_train, batch_size=32, epochs=self.nn_config["epochs"], callbacks=[callback],
                        verbose=self.nn_config["verbose"], validation_split=self.nn_config["validation_split"])
 
         forecasted_points = self.model.predict(x_test)[0][0]

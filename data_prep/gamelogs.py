@@ -6,7 +6,7 @@ from nba_api.stats.endpoints import teamgamelogs, leaguedashptteamdefend, teames
 nba_teams_info = pd.read_csv("data/static_data/static_team_info.csv", index_col=0)
 
 
-def fetch_defensive_stats(seasons: list[str], season_segment=None):
+def fetch_defensive_stats(seasons: list[str], season_segment: str=None):
     """_summary_
 
     :param team_id: _description_
@@ -109,7 +109,7 @@ def merge_defensive_stats(season: str, game_log: pd.DataFrame, pre_asb_stats: li
         post_asb = game_log.copy()
         for defensive_stats in post_asb_stats:
             defensive_stats: pd.DataFrame = defensive_stats.drop(columns=["TEAM_NAME", "TEAM_ABBREVIATION", "FREQ",
-                                                                        "GP", "G", "PLUSMINUS"])
+                                                                          "GP", "G", "PLUSMINUS"])
             post_asb = post_asb[post_asb["GAME_DATE"] >= all_star_date].merge(defensive_stats, on="TEAM_ID")
     else:
         post_asb = pd.DataFrame([])
@@ -151,14 +151,14 @@ def merge_defensive_stats_to_game_logs(seasons: list):
             complete_log.to_csv(f"{team_logs_path}")
 
 
-def consolidate_all_game_logs(seasons: list):
+def consolidate_all_game_logs(seasons: list, season_to_update: list[str]):
     """
     Consolidate all the logs into 1
     across ALL collected seasons
     """
     print(f"Adding new game logs from {seasons} to all_logs.csv")
-    all_logs = []
-    for season in seasons:
+    season_all_logs = []
+    for season in season_to_update:
         season_team_logs = []
         dir = f"data/seasonal_data/20{season[-2:]}/team_logs"
         for filename in os.listdir(dir):
@@ -166,10 +166,23 @@ def consolidate_all_game_logs(seasons: list):
             season_team_logs.append(team_log)
         season_team_logs = pd.concat(season_team_logs, axis=0)
         season_team_logs.to_csv(f"{dir}/team_logs.csv")
-        all_logs.append(season_team_logs)
+        season_all_logs.append(season_team_logs)
+        season_all_logs = pd.concat(season_all_logs, axis=0)
+        season_all_logs.to_csv(f"{dir}/all_logs.csv")
 
-    all_logs = pd.concat(all_logs, axis=0)
+    all_logs = []
+    for season in seasons:
+        dir = f"data/seasonal_data/20{season[-2:]}/team_logs"
+        season_all_logs = pd.read_csv(f"{dir}/all_logs.csv", index_col=0)
+        if season == "2023-24":
+            cols_wanted = season_all_logs.columns
+        season_all_logs = season_all_logs[cols_wanted]
+        all_logs.append(season_all_logs)
+    
+    all_logs = pd.concat(all_logs, axis=0).drop_duplicates("GAME_ID")
+    all_logs.reset_index(inplace=True)
     all_logs.to_csv(f"data/all_logs.csv")
+        
 
 
 def update_data(seasons: list):

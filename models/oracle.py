@@ -1,6 +1,5 @@
 import json
 import os
-from typing import Tuple
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import pandas as pd
@@ -17,15 +16,15 @@ class Oracle:
         Initialize the Oracle
 
         :param game_details: dict containing details of game to forecast
-        :param oracle_config: _description_
-        :param nn_config: _description_
+        :param oracle_config: config for Oracle
+        :param nn_config: config Neural Network
         """
         self.model_config: dict = model_config
         self.game_date: str = game_details["game_date"]
         self.oracle_config = oracle_config
 
         self.locker_room = LockerRoom(game_details, oracle_config["features"],
-                                      oracle_config["fetch_new_data"])
+                                      oracle_config["fetch_new_data"], oracle_config["holdout"])
         self.setup_oracle(oracle_config)
 
     def setup_oracle(self, oracle_config: dict):
@@ -43,6 +42,7 @@ class Oracle:
         model = oracle_config["model"].upper()
 
         if model == "NN":
+            self.fga_model = NeuralNet(oracle_config["fga_features"])
             self.model = NeuralNet(self.model_config)
         elif model == "XGBOOST":
             self.model = XGBoost(self.model_config)

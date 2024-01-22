@@ -16,7 +16,7 @@ pd.set_option('mode.chained_assignment', None)
 pd.set_option('display.max_columns', None)
 
 
-current_season = "2023-24"
+current_season = ["2023-24"]
 collected_seasons = ["2023-24", "2022-23", "2021-22", "2020-21"]
 
 class Team(Enum):
@@ -37,7 +37,7 @@ class GamePlan:
 
 class LockerRoom:
     def __init__(self, game_details: dict, features: list,
-                 fetch_new_data: bool):
+                 fetch_new_data: bool, holdout: bool):
         """
         Initialize the Locker Room
 
@@ -50,6 +50,7 @@ class LockerRoom:
         :param season: _description_, defaults to "2022-23"
         """
         self.overwrite = game_details["new_game"]
+        self.holdout = holdout
 
         self.home_team = game_details["home_team"]
         self.away_team = game_details["away_team"]
@@ -100,11 +101,10 @@ class LockerRoom:
         :return: _description_
         """
         if fetch_new_data:
-            update_data([current_season])
-            consolidate_all_game_logs(collected_seasons)
+            update_data(current_season)
+            consolidate_all_game_logs(collected_seasons, current_season)
 
         self.all_logs = pd.read_csv("data/all_logs.csv", index_col=0, low_memory=False)
-        self.all_logs["GAME_DATE"] = pd.to_datetime(self.all_logs["GAME_DATE"])
 
     @staticmethod
     def _pause_for_configurations() -> int:
@@ -227,7 +227,7 @@ class LockerRoom:
 
         return players_game_log
 
-    def get_filtered_players_logs(self, players_id: int) -> pd.DataFrame:
+    def get_filtered_players_logs(self, players_id: int) -> tuple[pd.DataFrame, int]:
         """
         Retrieve the filtered game logs for given player
 
@@ -244,8 +244,12 @@ class LockerRoom:
 
         if not all_logs.empty:
             all_logs = self._add_predictors_to_players_log(all_logs)
+            if self.holdout:
+                actual_points = all_logs[all_logs["GAME_DATE"]==self.game_date]
+            else:
+                actual_points = 0
 
-        return all_logs
+        return all_logs, actual_points
 
     def _add_predictors_to_players_log(self, players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
         """_summary_
@@ -254,7 +258,6 @@ class LockerRoom:
         :return: _description_
         """
         players_log = self._add_rest_days_and_opp_id(players_game_logs_df)
-        # most_recent_game_date = self.get_most_recent_game_date(players_game_logs_df)
         players_log = LockerRoom._add_home_away_columns(players_log)
         complete_log = self._merge_defensive_stats_to_players_log(players_log)
         filtered_log = LockerRoom.filter_stats(complete_log, self.predictors_plus_label)
@@ -280,11 +283,9 @@ class LockerRoom:
         return players_game_logs_df
 
     def _merge_defensive_stats_to_players_log(self, players_game_log: pd.DataFrame) -> pd.DataFrame:
-        """_summary_
-
-        :param players_game_log: _description_
-        :param season: _description_
-        :return: _description_
+        """
+        Merge the opposing defense stats
+        to the player's log
         """
         players_game_log = players_game_log.rename(columns={"Game_ID": "GAME_ID"})
         players_game_log["GAME_ID"] = players_game_log["GAME_ID"].astype(np.int64)
@@ -400,18 +401,3 @@ class LockerRoom:
 
         # Filter out the wanted columns
         return pd.concat(game_logs_by_year, axis=0)
-
-    def fetch_game_box_score(self, game_date: str) -> pd.DataFrame:
-        """_summary_
-
-        :param team_game_logs: _description_
-        :param game_date: _description_
-        :return: _description_
-        """
-        game_date = pd.Timestamp(game_date)
-        game_id = self.all_logs[(self.all_logs["GAME_DATE"] == game_date) & \
-                                (self.all_logs["TEAM_ABBREVIATION_x"] == self.nba_teams_info[self.nba_teams_info["nickname"] ==\
-                                 self.home_team]["abbreviation"].values[0])]["GAME_ID"].values[0]
-        box_score = boxscoretraditionalv2.BoxScoreTraditionalV2(game_id=game_id).get_data_frames()[0]
-
-        return box_score
