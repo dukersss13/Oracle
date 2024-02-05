@@ -42,12 +42,11 @@ class Oracle:
         model = oracle_config["model"].upper()
 
         if model == "NN":
-            self.fga_model = NeuralNet(oracle_config["fga_features"])
-            self.model = NeuralNet(self.model_config)
+            self.points_predictor = NeuralNet(self.model_config)
         elif model == "XGBOOST":
-            self.model = XGBoost(self.model_config)
+            self.points_predictor = XGBoost(self.model_config)
         else:
-            raise NotImplementedError(f"{self.model} is not implemented - select a different model!")
+            raise NotImplementedError(f"{self.points_predictor} is not implemented - select a different model!")
 
     def scale_input(self, X: np.ndarray) -> np.ndarray:
         """
@@ -96,7 +95,21 @@ class Oracle:
 
         return x_train, y_train.values.astype(np.float32)
 
-    def prepare_testing_data(self, player_game_logs: pd.DataFrame, most_recent_game_date: pd.Timestamp, team: Team) -> np.ndarray:
+    @staticmethod
+    def init_attempts_predictor(input_shape: int) -> NeuralNet:
+        """
+        Init predictor for shot attempts
+        """
+        attempts_predictor_config = {"type": "Normal", "input_shape": None, "output_shape": 1, "validation_split": .10,
+          "activation_func": "relu", "learning_rate": 2e-4, "output_activation_func": "relu", "verbose": 0,
+          "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 300}
+        
+        attempts_predictor_config["input_shape"] = input_shape
+
+        return NeuralNet(attempts_predictor_config)
+
+    def prepare_testing_data(self, players_full_name: str, player_game_logs: pd.DataFrame,
+                             most_recent_game_date: pd.Timestamp, team: Team) -> np.ndarray:
         """
         Get the input parameters for the test set
 
@@ -109,29 +122,45 @@ class Oracle:
         home_or_away = np.array([1., 0.]) if team == Team.HOME else np.array([0., 1.])
         rest_days = (pd.Timestamp(self.game_date) - most_recent_game_date).days
 
-        # Take the MA for [MIN, FGA, FG3A_x, FTA]
-        x_test_statistics = player_game_logs[["MIN", "FGA", "FG3A_player", "FTA"]].iloc[1:ma_degree, :].mean().values
+        x_test_defense = self.locker_room.get_opponent_defensive_stats(team)
+        data_for_fga_pred = self.locker_room.prepare_training_data(player_game_logs, "MIN", "FGA")
+        # Use defensive stats to forecast fg3a & fta
+        data_for_fg3a_pred = self.locker_room.prepare_training_data(player_game_logs,
+                                                                    ["MIN", "FGA"], "FG3A_player")
+        data_for_fta_pred = self.locker_room.prepare_training_data(player_game_logs,
+                                                                   ["MIN", "LT_10_PCT", "NS_LT_10_PCT",
+                                                                    "E_PACE", "E_DEF_RATING"], "FTA")
+        testing_mins = self.get_player_mins(players_full_name, player_game_logs, team)
+
+        # Use mins to forecast fga
+        fga_predictor = Oracle.init_attempts_predictor(input_shape=1)
+        fga = round(fga_predictor.get_forecast(data_for_fga_pred, testing_mins))
+        # Use mins, fga, defense's fg3m, fg3a to forecast fg3a
+        fg3a_predictor = Oracle.init_attempts_predictor(input_shape=2)
+        fg3a = fg3a_predictor.get_forecast(data_for_fg3a_pred,
+                                           np.concatenate([testing_mins, [fga]]).reshape(1, -1))
+        # Use mins, fga and fg3a to forecast fta
+        fta_predictor = Oracle.init_attempts_predictor(input_shape=5)
+        fta = fta_predictor.get_forecast(data_for_fta_pred,
+                                         np.concatenate([testing_mins,
+                                                         x_test_defense[["LT_10_PCT", "NS_LT_10_PCT",
+                                                                         "E_PACE", "E_DEF_RATING"]]]).reshape(1, -1))
+
         test_fg_pct = Oracle.get_pct(player_game_logs["FGM"].values[:ma_degree].sum(), 
                                      player_game_logs["FGA"].values[:ma_degree].sum())
-        x_test_statistics = np.insert(x_test_statistics, 2, test_fg_pct)
 
         test_3fg_pct = Oracle.get_pct(player_game_logs["FG3M_player"].values[:ma_degree].sum(),
                                       player_game_logs["FG3A_player"].values[:ma_degree].sum())
-        x_test_statistics = np.insert(x_test_statistics, 4, test_3fg_pct)
 
         test_ft_pct = Oracle.get_pct(player_game_logs["FTM"].values[:ma_degree].sum(),
                                      player_game_logs["FTA"].values[:ma_degree].sum())
-        x_test_statistics = np.insert(x_test_statistics, 6, test_ft_pct)
 
-        x_test_defense = player_game_logs[["D_FGM", "D_FGA", "D_FG_PCT",
-                                           "FG3M_opp_defense", "FG3A_opp_defense", "FG3_PCT_opp_defense", "NS_FG3_PCT",
-                                           "FG2M", "FG2A", "FG2_PCT", "NS_FG2_PCT",
-                                           "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT",
-                                           "E_PACE", "E_DEF_RATING"]].iloc[1, :].values
+        # Reconstruct x_test
+        x_test = np.concatenate([testing_mins, 
+                                 [fga, test_fg_pct, fg3a,
+                                  test_3fg_pct, fta, test_ft_pct], home_or_away, [rest_days], x_test_defense.values])
 
-        x_test = np.concatenate([x_test_statistics, [rest_days], home_or_away, x_test_defense])
-
-        return x_test
+        return x_test.reshape(1, -1)
 
     @staticmethod
     def get_pct(x: int, y: int) -> float:
@@ -163,13 +192,12 @@ class Oracle:
         filtered_players_logs.dropna(inplace=True)
         most_recent_game_date = self.locker_room.get_most_recent_game_date(filtered_players_logs)
         training_data = self.prepare_training_data(filtered_players_logs)
-        x_test = self.prepare_testing_data(filtered_players_logs, most_recent_game_date, team)
-        x_test = self.assign_player_mins(players_full_name, x_test, team).reshape(1, -1)
+        x_test = self.prepare_testing_data(players_full_name, filtered_players_logs, most_recent_game_date, team)
         x_test = self.scale_test(x_test)
 
-        forecasted_points = self.model.get_forecast(training_data, x_test)
+        forecasted_points = self.points_predictor.get_forecast(training_data, x_test)
 
-        return int(forecasted_points)
+        return int(round(forecasted_points))
 
     def get_team_forecast(self, team: Team):
         """
@@ -191,12 +219,11 @@ class Oracle:
 
         for players_name, players_id in data.active_players.iterrows():
             print(f"\nFetching game logs for: {players_name}")
-            filtered_players_logs = self.locker_room.get_filtered_players_logs(players_id)
+            filtered_players_logs, actual_points = self.locker_room.get_filtered_players_logs(players_id)
 
             print(f"Starting forecast for: {players_name}")
             forecasted_points = self.get_players_forecast(players_name, filtered_players_logs, team)
             print(f"Forecasted points: {forecasted_points}")
-            actual_points = filtered_players_logs["PTS"].values[0] if self.holdout else 0
             forecast_dict = Oracle.append_to_forecast_dict(forecast_dict, players_name, forecasted_points, actual_points)
             players_done += 1
 
@@ -207,7 +234,8 @@ class Oracle:
 
         return forecast_df
 
-    def assign_player_mins(self, players_full_name: str, x_test: np.ndarray, team: Team) -> np.ndarray:
+    def get_player_mins(self, players_full_name: str,
+                        players_game_log: pd.DataFrame, team: Team) -> np.float32:
         """
         Manually assign player's minutes
 
@@ -219,9 +247,11 @@ class Oracle:
                             self.locker_room.away_game_plan.players_mins
 
         if players_mins_data[players_full_name] is not None:
-            x_test[-4] = float(players_mins_data[players_full_name])
+            mins = players_mins_data[players_full_name]
+        else:
+            mins = players_game_log["MIN"].values[:self.oracle_config["MA_degree"]].mean()
         
-        return x_test
+        return np.array([np.float32(round(mins))])
 
     @staticmethod
     def append_to_forecast_dict(forecast_dict: dict, players_name: str, forecasted_points: int, actual_points: int) -> dict:
@@ -293,4 +323,3 @@ class Oracle:
         if self.save_output:
             print("Saving output files")
             self.save_forecasts(home_team_forecast_df, away_team_forecast_df)
-

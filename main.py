@@ -11,6 +11,5 @@ if __name__ == "__main__":
     print(f"Total solve time E2E: {round((end-start) / 60)} minutes")
 
 # TODO
-# Fix merging issues
-# Forecast Player's Attempts using Minutes
-# attempts = f(minutes) & % = f(opp_defense) & pts = f(attempts, %)
+# Fix holdout + produce nice box score
+# Incorporate Bard

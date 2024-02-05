@@ -77,11 +77,10 @@ class LockerRoom:
         self.home_game_plan.team_id = self.fetch_teams_id(home_lookup_values)
         self.away_game_plan.team_id = self.fetch_teams_id(away_lookup_values)
 
-        self.home_away_dict = {self.home_team: Team.HOME, self.away_team: Team.AWAY}
+        self.home_away_dict = {Team.HOME: self.home_team, Team.AWAY: self.away_team}
 
         self._set_game_plan()
         self._fetch_all_logs(fetch_new_data)
-
 
     def _set_game_plan(self):
         """
@@ -250,6 +249,35 @@ class LockerRoom:
                 actual_points = 0
 
         return all_logs, actual_points
+    
+    def get_opponent_defensive_stats(self, team: Team) -> pd.Series:
+        """_summary_
+
+        :param team: _description_
+        :return: _description_
+        """
+        cols = ["D_FGM", "D_FGA", "D_FG_PCT",
+                "FG3M", "FG3A", "FG3_PCT", "NS_FG3_PCT",
+                "FG2M", "FG2A", "FG2_PCT", "NS_FG2_PCT",
+                "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT",
+                "E_PACE", "E_DEF_RATING"]
+        opponent_name = self.home_away_dict[Team.AWAY if team == Team.HOME else Team.HOME]
+        opponent_id = self.fetch_teams_id(("nickname", opponent_name))
+        opponent_defensive_stats = self.all_logs[(self.all_logs["SEASON_YEAR"]==current_season[0]) & \
+                                                 (self.all_logs["TEAM_ID"]==opponent_id)][cols].iloc[0, :]
+
+        return opponent_defensive_stats
+
+    @staticmethod
+    def prepare_training_data(players_game_log: pd.DataFrame, input_cols: list[str],
+                              label_col: str) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Extract specified input and output columns for training
+        """
+        input_cols = players_game_log[input_cols].values.astype(np.float32)
+        label_col = players_game_log[label_col].values.astype(np.float32)
+        
+        return input_cols, label_col 
 
     def _add_predictors_to_players_log(self, players_game_logs_df: pd.DataFrame) -> pd.DataFrame:
         """_summary_

@@ -7,7 +7,6 @@ from keras.optimizers import SGD, Adam
 from keras.callbacks import EarlyStopping
 import tensorflow as tf
 
-
 class NeuralNet:
     def __init__(self, nn_config: dict):
         """
@@ -23,6 +22,7 @@ class NeuralNet:
         self.output_activation_func = nn_config["output_activation_func"]
         self.model = self.compile_model(nn_config["learning_rate"], nn_config["loss_function"],
                                         nn_config["optimizer_function"], nn_config["metrics"])
+        self.callbacks = EarlyStopping(monitor="val_loss", min_delta=1e-6, patience=20, restore_best_weights=True)
 
     def _create_neural_network(self) -> Sequential:
         if self.nn_config["type"] == "GRU":
@@ -36,7 +36,6 @@ class NeuralNet:
         model = Sequential()
         model.add(Input(shape=(self.input_shape, )))
         model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(3e-3)))
-        model.add(BatchNormalization())
         model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(1e-3))) # Nash
         model.add(Dropout(0.20)) # Ray Allen
         model.add(Dense(81, activation=self.activation_func, batch_size=24)) # Kobe
@@ -49,10 +48,10 @@ class NeuralNet:
         model.add(Input(shape=(1, self.input_shape)))
         model.add(GRU(units=128, activation=self.activation_func, kernel_regularizer=regularizers.l1(3e-3),
                       dropout=0.1, unroll=True, return_sequences=True))
-        model.add(BatchNormalization())
-        model.add(GRU(units=128, activation=self.activation_func, batch_size=32, dropout=0.2, unroll=True))
+        model.add(GRU(units=128, activation=self.activation_func, batch_size=32, unroll=True))
         model.add(Dense(units=128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(1e-3)))
         model.add(Dense(81, activation=self.activation_func, batch_size=24))
+        model.add(Dropout(0.1))
         model.add(Dense(1, activation=self.output_activation_func))
 
         return model
@@ -94,16 +93,14 @@ class NeuralNet:
         :param training_data: training data
         :param x_test: testing input
         """
-        callback = EarlyStopping(monitor="val_loss", min_delta=1e-6, patience=20, restore_best_weights=True)
-
         x_train, y_train = training_data
         if self.nn_config["type"] == "GRU":
             x_train = x_train.reshape(x_train.shape[0], 1, x_train.shape[1])
             x_test = x_test.reshape(x_test.shape[0], 1, x_test.shape[1])
 
-        self.model.fit(x_train, y_train, batch_size=32, epochs=self.nn_config["epochs"], callbacks=[callback],
+        self.model.fit(x_train, y_train, batch_size=32, epochs=self.nn_config["epochs"], callbacks=[self.callbacks],
                        verbose=self.nn_config["verbose"], validation_split=self.nn_config["validation_split"])
 
-        forecasted_points = self.model.predict(x_test)[0][0]
+        forecasted_values = self.model.predict(x_test)[0][0]
 
-        return forecasted_points
+        return forecasted_values
