@@ -9,7 +9,7 @@ features = ["MIN", "GAME_DATE_player",
             "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT",
             "E_PACE", "E_DEF_RATING", "PTS"]
 
-game_details = {"home_team": "76ers", "away_team": "Nuggets", "game_date": "01-16-2024", "new_game": False}
+game_details = {"home_team": "76ers", "away_team": "Nuggets", "game_date": "01-16-2024", "new_game": True}
 
 nn_config = {"type": "GRU", "input_shape": len(features)-5, "output_shape": 1, "validation_split": .15,
              "activation_func": "relu", "learning_rate": 2e-3, "output_activation_func": "relu", "verbose": 1,

@@ -8,8 +8,8 @@ from tensorflow import one_hot
 from dataclasses import dataclass
 
 from data_prep.gamelogs import update_data, consolidate_all_game_logs, nba_teams_info
-from nba_api.stats.endpoints import (playergamelog, boxscoretraditionalv2,
-                                     commonteamroster)
+from data_prep.injury_report import injury_report
+from nba_api.stats.endpoints import playergamelog, commonteamroster
 from nba_api.stats.static import  players
 
 pd.set_option('mode.chained_assignment', None)
@@ -95,9 +95,8 @@ class LockerRoom:
             raise ValueError("Aborting program!")         
     
     def _fetch_all_logs(self, fetch_new_data: bool):
-        """_summary_
-
-        :return: _description_
+        """
+        Grab the logs for all games
         """
         if fetch_new_data:
             update_data(current_season)
@@ -165,8 +164,11 @@ class LockerRoom:
 
         for team in active_players_json:
             team_data = self.home_game_plan if team == self.home_team else self.away_game_plan
+            full_team_name = self.nba_teams_info[self.nba_teams_info["nickname"]==team_data.team_name]["full_name"].values[0]
+            team_injury_report = injury_report[injury_report["team"]==full_team_name]
             active_players_df = pd.DataFrame(active_players_json[team], index=["Mins"]).T
-            active_players = active_players_df[active_players_df["Mins"] != 0]
+            injured_players = team_injury_report["name"].values
+            active_players = active_players_df[~np.isin(active_players_df.index.values, injured_players)]
             team_data.active_players = team_data.team_roster[np.isin(team_data.team_roster["PLAYER"],
                                                              active_players.index)].set_index("PLAYER")
             team_data.players_mins = active_players.to_dict()["Mins"]
