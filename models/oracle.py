@@ -7,7 +7,6 @@ import pandas as pd
 from data_prep.locker_room import LockerRoom, Team
 from models.neural_networks import NeuralNet
 from models.ml_models import XGBoost
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 
 class Oracle:
@@ -35,8 +34,7 @@ class Oracle:
         """
         self.scaler = None
         self.save_output: bool = oracle_config["save_file"]
-        self.output_path: str = oracle_config["output_path"]
-        self.scaling_method: str = oracle_config["scaling_method"]
+        self.output_path: str = "output"
         self.holdout: bool = oracle_config["holdout"]
 
         model = oracle_config["model"].upper()
@@ -48,39 +46,6 @@ class Oracle:
         else:
             raise NotImplementedError(f"{self.points_predictor} is not implemented - select a different model!")
 
-    def scale_input(self, X: np.ndarray) -> np.ndarray:
-        """
-        Scale input depending on the scaling method
-
-        :param X: input to scale
-        :param scaling_method: scaling method
-        :return: scaled input
-        """
-        scaling_method = self.oracle_config["scaling_method"]
-
-        if scaling_method not in ["standard", "minmax", None]:
-            raise NotImplementedError(f"Do not recognize {scaling_method} scaling method!")
-
-        if scaling_method is None:
-            return X
-        elif scaling_method.lower() == "standard":
-            self.scaler = StandardScaler()
-        elif scaling_method.lower() == "minmax":
-            self.scaler = MinMaxScaler()
-        
-        return self.scaler.fit_transform(X)
-    
-    def scale_test(self, X_test: np.ndarray) -> np.ndarray:
-        """
-        Scale the testing inputs
-        """
-        if self.scaler is None:
-            X_test = X_test
-        else:
-            X_test = self.scaler.transform(X_test)
-
-        return X_test.astype(np.float32)
-
     def prepare_training_data(self, player_game_logs: np.ndarray) -> tuple:
         """
         Prepare the training data for given player
@@ -91,8 +56,6 @@ class Oracle:
         cols_to_drop = ["GAME_DATE_player", "FGM", "FG3M_player", "FTM"]
         x_train, y_train = player_game_logs.iloc[1:, :-1].drop(cols_to_drop, axis=1), player_game_logs.iloc[1:, -1]
 
-        x_train = self.scale_input(x_train.values.astype(np.float32)) 
-
         return x_train, y_train.values.astype(np.float32)
 
     @staticmethod
@@ -100,11 +63,10 @@ class Oracle:
         """
         Init predictor for shot attempts
         """
-        attempts_predictor_config = {"type": "Normal", "input_shape": None, "output_shape": 1, "validation_split": .10,
+        attempts_predictor_config = {"type": "Normal", "input_shape": input_shape, "output_shape": 1, "validation_split": .10,
           "activation_func": "relu", "learning_rate": 2e-4, "output_activation_func": "relu", "verbose": 0,
-          "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 300}
-        
-        attempts_predictor_config["input_shape"] = input_shape
+          "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 300,
+          "timesteps": 0, "scaling_method": "standard"}
 
         return NeuralNet(attempts_predictor_config)
 
@@ -118,7 +80,7 @@ class Oracle:
         :param team: home or away
         :return: x_test & y_test (if applicable)
         """
-        ma_degree: int = self.oracle_config["MA_degree"]
+        timesteps: int = self.model_config["timesteps"]
         home_or_away = np.array([1., 0.]) if team == Team.HOME else np.array([0., 1.])
         rest_days = (pd.Timestamp(self.game_date) - most_recent_game_date).days
 
@@ -127,9 +89,6 @@ class Oracle:
         # Use defensive stats to forecast fg3a & fta
         data_for_fg3a_pred = self.locker_room.prepare_training_data(player_game_logs,
                                                                     ["MIN", "FGA"], "FG3A_player")
-        data_for_fta_pred = self.locker_room.prepare_training_data(player_game_logs,
-                                                                   ["MIN", "LT_10_PCT", "NS_LT_10_PCT",
-                                                                    "E_PACE", "E_DEF_RATING"], "FTA")
         testing_mins = self.get_player_mins(players_full_name, player_game_logs, team)
 
         # Use mins to forecast fga
@@ -138,29 +97,29 @@ class Oracle:
         # Use mins, fga, defense's fg3m, fg3a to forecast fg3a
         fg3a_predictor = Oracle.init_attempts_predictor(input_shape=2)
         fg3a = fg3a_predictor.get_forecast(data_for_fg3a_pred,
-                                           np.concatenate([testing_mins, [fga]]).reshape(1, -1))
-        # Use mins, fga and fg3a to forecast fta
-        fta_predictor = Oracle.init_attempts_predictor(input_shape=5)
-        fta = fta_predictor.get_forecast(data_for_fta_pred,
-                                         np.concatenate([testing_mins,
-                                                         x_test_defense[["LT_10_PCT", "NS_LT_10_PCT",
-                                                                         "E_PACE", "E_DEF_RATING"]]]).reshape(1, -1))
+                                           np.concatenate([testing_mins, [fga]]))
 
-        test_fg_pct = Oracle.get_pct(player_game_logs["FGM"].values[:ma_degree].sum(), 
-                                     player_game_logs["FGA"].values[:ma_degree].sum())
+        fta = round(player_game_logs["FTA"].values[:timesteps].mean())
 
-        test_3fg_pct = Oracle.get_pct(player_game_logs["FG3M_player"].values[:ma_degree].sum(),
-                                      player_game_logs["FG3A_player"].values[:ma_degree].sum())
+        test_fg_pct = Oracle.get_pct(player_game_logs["FGM"].values[:timesteps].sum(), 
+                                     player_game_logs["FGA"].values[:timesteps].sum())
 
-        test_ft_pct = Oracle.get_pct(player_game_logs["FTM"].values[:ma_degree].sum(),
-                                     player_game_logs["FTA"].values[:ma_degree].sum())
+        test_3fg_pct = Oracle.get_pct(player_game_logs["FG3M_player"].values[:timesteps].sum(),
+                                      player_game_logs["FG3A_player"].values[:timesteps].sum())
+
+        test_ft_pct = Oracle.get_pct(player_game_logs["FTM"].values[:timesteps].sum(),
+                                     player_game_logs["FTA"].values[:timesteps].sum())
 
         # Reconstruct x_test
+        starting_idx = int(self.holdout)
+        x_test_4 = player_game_logs.iloc[starting_idx:timesteps, :][self.oracle_config["features"]].\
+                   drop(columns=["GAME_DATE_player", "FGM", "FG3M_player", "FTM", "PTS"]).values
         x_test = np.concatenate([testing_mins, 
-                                 [fga, test_fg_pct, fg3a,
-                                  test_3fg_pct, fta, test_ft_pct], home_or_away, [rest_days], x_test_defense.values])
+                                [fga, test_fg_pct, fg3a,
+                                 test_3fg_pct, fta, test_ft_pct],
+                                 home_or_away, [rest_days], x_test_defense.values])
 
-        return x_test.reshape(1, -1)
+        return np.concatenate([x_test.reshape(1, -1), x_test_4])
 
     @staticmethod
     def get_pct(x: int, y: int) -> float:
@@ -181,23 +140,28 @@ class Oracle:
         :param players_full_name: full name of player
         :param filtered_players_logs: players' game logs
         """
-        if filtered_players_logs.empty or filtered_players_logs["MIN"].values[:3].mean() <= 5:
+        empty_logs = filtered_players_logs.empty
+        doesnt_play = filtered_players_logs["MIN"].values[:self.model_config["timesteps"]].mean() <= 8
+        if self.model_config["type"] == "GRU":
+            min_games = self.model_config["timesteps"] * 10
+        else:
+            min_games = 20
+
+        if empty_logs or doesnt_play:
             return 0
 
-        elif filtered_players_logs.shape[0] < 15:
+        elif filtered_players_logs.shape[0] < min_games:
             print(f"WARNING: {players_full_name} has only played {filtered_players_logs.shape[0]} games.")
             print(f"WARNING: Cannot run forecast for {players_full_name}. Will use player's average as forecast")
             return int(filtered_players_logs.iloc[:, -1].mean())
 
-        filtered_players_logs.dropna(inplace=True)
         most_recent_game_date = self.locker_room.get_most_recent_game_date(filtered_players_logs)
         training_data = self.prepare_training_data(filtered_players_logs)
         x_test = self.prepare_testing_data(players_full_name, filtered_players_logs, most_recent_game_date, team)
-        x_test = self.scale_test(x_test)
 
         forecasted_points = self.points_predictor.get_forecast(training_data, x_test)
 
-        return int(round(forecasted_points))
+        return forecasted_points
 
     def get_team_forecast(self, team: Team):
         """
@@ -220,7 +184,7 @@ class Oracle:
         for players_name, players_id in data.active_players.iterrows():
             print(f"\nFetching game logs for: {players_name}")
             filtered_players_logs, actual_points = self.locker_room.get_filtered_players_logs(players_id)
-
+            
             print(f"Starting forecast for: {players_name}")
             forecasted_points = self.get_players_forecast(players_name, filtered_players_logs, team)
             print(f"Forecasted points: {forecasted_points}")
@@ -249,7 +213,7 @@ class Oracle:
         if players_mins_data[players_full_name] is not None:
             mins = players_mins_data[players_full_name]
         else:
-            mins = players_game_log["MIN"].values[:self.oracle_config["MA_degree"]].mean()
+            mins = players_game_log["MIN"].values[:self.model_config["timesteps"]].mean()
         
         return np.array([np.float32(round(mins))])
 

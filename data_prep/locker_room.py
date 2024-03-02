@@ -168,9 +168,8 @@ class LockerRoom:
             team_injury_report = injury_report[injury_report["team"]==full_team_name]
             active_players_df = pd.DataFrame(active_players_json[team], index=["Mins"]).T
             injured_players = team_injury_report["name"].values
-            active_players = active_players_df[~np.isin(active_players_df.index.values, injured_players)]
-            team_data.active_players = team_data.team_roster[np.isin(team_data.team_roster["PLAYER"],
-                                                             active_players.index)].set_index("PLAYER")
+            active_players = active_players_df[(~np.isin(active_players_df.index.values, injured_players) & (active_players_df["Mins"]!=0).values)]
+            team_data.active_players = team_data.team_roster[np.isin(team_data.team_roster["PLAYER"], active_players.index)].set_index("PLAYER")
             team_data.players_mins = active_players.to_dict()["Mins"]
 
     def _update_game_plan(self):
@@ -242,21 +241,22 @@ class LockerRoom:
                 all_logs = pd.concat([all_logs, players_game_logs_df])
             except:
                 print(f"Logs for playerID: {players_id.values[0]} for {season} cannot be fetched.")
-
+        actual_points = 0   
         if not all_logs.empty:
-            all_logs = self._add_predictors_to_players_log(all_logs)
+            all_logs: pd.DataFrame = self._add_predictors_to_players_log(all_logs)
             if self.holdout:
-                actual_points = all_logs[all_logs["GAME_DATE"]==self.game_date]
-            else:
-                actual_points = 0
+                try:
+                    actual_points = all_logs[all_logs["GAME_DATE_player"] == pd.Timestamp(self.game_date)]["PTS"].values[0]
+                except IndexError:
+                    actual_points = 0
+            all_logs = all_logs[all_logs["GAME_DATE_player"] < self.game_date]
+            all_logs.dropna(inplace=True)
 
         return all_logs, actual_points
     
     def get_opponent_defensive_stats(self, team: Team) -> pd.Series:
-        """_summary_
-
-        :param team: _description_
-        :return: _description_
+        """
+        Retrieve the opponent's defensive stats
         """
         cols = ["D_FGM", "D_FGA", "D_FG_PCT",
                 "FG3M", "FG3A", "FG3_PCT", "NS_FG3_PCT",
@@ -318,9 +318,9 @@ class LockerRoom:
         to the player's log
         """
         players_game_log = players_game_log.rename(columns={"Game_ID": "GAME_ID"})
-        players_game_log["GAME_ID"] = players_game_log["GAME_ID"].astype(np.int64)
+        players_game_log["GAME_ID"] = players_game_log["GAME_ID"].astype(int)
         log_with_defensive_stats = players_game_log.merge(self.all_logs, how="left", 
-                                                          on=["GAME_ID", "TEAM_ID"],
+                                                          on=["GAME_ID"],
                                                           suffixes=["_player", "_opp_defense"])
 
         return log_with_defensive_stats

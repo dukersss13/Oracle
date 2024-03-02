@@ -12,4 +12,3 @@ if __name__ == "__main__":
 
 # TODO
 # Fix holdout + produce nice box score
-# Incorporate Bard
