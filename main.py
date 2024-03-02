@@ -9,6 +9,3 @@ if __name__ == "__main__":
     oracle.run()
     end = time()
     print(f"Total solve time E2E: {round((end-start) / 60)} minutes")
-
-# TODO
-# Fix holdout + produce nice box score
