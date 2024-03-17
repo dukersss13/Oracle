@@ -3,7 +3,7 @@ import xgboost as xgb
 
 
 class XGBoost:
-    def __init__(self, model_config: dict, train_data: tuple, validation_set: tuple):
+    def __init__(self, model_config: dict, training_data: tuple):
         """
         Init the XGBoost class
 
@@ -12,16 +12,18 @@ class XGBoost:
         :param validation_set: validation data
         """
         self.model_config = model_config
-        self.train_data = train_data
-        self.validation_set = validation_set
-        self.xgboost_model = self._create_xgb_model()
+        self.xgboost_model = self._create_xgb_model(training_data)
 
-    def _create_xgb_model(self) -> xgb:
+    def _create_xgb_model(self, training_data: tuple) -> xgb:
         """
         Create an XGB model
         """
-        training_data = xgb.DMatrix(self.train_data[0], label=self.train_data[1])
-        val_data = xgb.DMatrix(self.validation_set[0], label=self.validation_set[1])
+        split = round(0.15 * len(training_data[0]))
+        training_data = (training_data[0][:-split], training_data[1][:-split])
+        validation_data = (training_data[0][-split:], training_data[1][-split:])
+
+        training_data = xgb.DMatrix(training_data[0].reshape(1, -1), label=training_data[1])
+        val_data = xgb.DMatrix(validation_data[0].reshape(1, -1), label=validation_data[1])
         
         eval_data = [(val_data, "evals")]
         
@@ -42,9 +44,6 @@ class XGBoost:
         """
         Wrapper function to init, train & predict XGBoost Regressor
         """
-        split = round(0.1 * len(training_data[0]))
-        training_data = (training_data[0][:-split], training_data[1][:-split])
-        validation_data = (training_data[0][-split:], training_data[1][-split:])
 
         xgb_model = XGBoost(self.model_config, training_data, validation_data)
         forecasted_points = xgb_model.predict(x_test)
