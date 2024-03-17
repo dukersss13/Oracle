@@ -17,7 +17,7 @@ pd.set_option('display.max_columns', None)
 
 
 current_season = ["2023-24"]
-collected_seasons = ["2023-24", "2022-23", "2021-22", "2020-21"]
+collected_seasons = ["2023-24", "2022-23", "2021-22"]
 
 class Team(Enum):
     HOME = 0

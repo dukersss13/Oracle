@@ -44,11 +44,10 @@ class NeuralNet:
     def _create_sequential_nn(self) -> Sequential:
         model = Sequential()
         model.add(Input(shape=(self.input_shape, )))
-        model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l1(2e-3)))
-        model.add(BatchNormalization())
-        model.add(Dense(128, activation=self.activation_func, batch_size=32, kernel_regularizer=regularizers.l2(1e-3))) # Nash
-        model.add(Dropout(0.20)) # Ray Allen
-        model.add(Dense(81, activation=self.activation_func, batch_size=24)) # Kobe
+        model.add(Dense(128, activation=self.activation_func))
+        model.add(Dense(128, activation=self.activation_func))
+        model.add(Dropout(0.2)) # Ray Allen
+        model.add(Dense(81, activation=self.activation_func)) # Kobe
         model.add(Dense(1, activation=self.output_activation_func))
 
         return model
@@ -57,12 +56,12 @@ class NeuralNet:
         model = Sequential()
         model.add(Input(shape=(self.timesteps, self.input_shape)))
         model.add(BatchNormalization())
-        model.add(GRU(units=128, kernel_regularizer=regularizers.l1(2e-3), dropout=0.2, unroll=True, return_sequences=True))
+        model.add(GRU(units=128, kernel_regularizer=regularizers.l1(1e-3), dropout=0.2, unroll=True, return_sequences=True))
         model.add(GRU(units=128, unroll=True, return_sequences=True))
         model.add(GRU(units=128, unroll=True, kernel_regularizer=regularizers.l2(1e-3)))
         model.add(Dense(128, activation=self.activation_func))
         model.add(Dense(128, activation=self.activation_func))
-        model.add(Dropout(0.1))
+        model.add(Dropout(0.2))
         model.add(Dense(1, activation=self.output_activation_func))
 
         return model
@@ -153,7 +152,7 @@ class NeuralNet:
         :param training_data: training data
         :param x_test: testing input
         """
-        callbacks = EarlyStopping(monitor="val_loss", min_delta=1e-8, patience=30, restore_best_weights=True)
+        callbacks = EarlyStopping(monitor="val_loss", min_delta=1e-8, patience=500, restore_best_weights=True)
 
         x_train, y_train = training_data
         x_train = self.scale_input(x_train)
