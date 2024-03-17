@@ -109,7 +109,7 @@ def merge_defensive_stats(season: str, game_log: pd.DataFrame, pre_asb_stats: li
         post_asb = game_log.copy()
         for defensive_stats in post_asb_stats:
             defensive_stats: pd.DataFrame = defensive_stats.drop(columns=["TEAM_NAME", "TEAM_ABBREVIATION", "FREQ",
-                                                                          "GP", "G", "PLUSMINUS"])
+                                                                          "GP", "G"])
             post_asb = post_asb[post_asb["GAME_DATE"] >= all_star_date].merge(defensive_stats, on="TEAM_ID")
     else:
         post_asb = pd.DataFrame([])
@@ -164,22 +164,19 @@ def consolidate_all_game_logs(seasons: list, season_to_update: list[str]):
         for filename in os.listdir(dir):
             team_log = pd.read_csv(f"{dir}/{filename}", index_col=0)
             season_team_logs.append(team_log)
-        season_team_logs = pd.concat(season_team_logs, axis=0)
-        season_team_logs.to_csv(f"{dir}/team_logs.csv")
-        season_all_logs.append(season_team_logs)
-        season_all_logs = pd.concat(season_all_logs, axis=0)
-        season_all_logs.to_csv(f"{dir}/all_logs.csv")
+        season_team_logs: pd.DataFrame = pd.concat(season_team_logs, axis=0)
+    season_team_logs.to_csv(f"{dir}/all_logs.csv")
 
     all_logs = []
     for season in seasons:
         dir = f"data/seasonal_data/20{season[-2:]}/team_logs"
-        season_all_logs = pd.read_csv(f"{dir}/all_logs.csv", index_col=0)
-        if season == "2023-24":
-            cols_wanted = season_all_logs.columns
-        season_all_logs = season_all_logs[cols_wanted]
+        season_all_logs = pd.read_csv(f"{dir}/all_logs.csv")
+        # if season == "2023-24":
+        #     cols_wanted = season_all_logs.columns
+        # season_all_logs = season_all_logs[cols_wanted]
         all_logs.append(season_all_logs)
     
-    all_logs = pd.concat(all_logs, axis=0).drop_duplicates("GAME_ID")
+    all_logs = pd.concat(all_logs, axis=0)
     all_logs.reset_index(inplace=True)
     all_logs.to_csv(f"data/all_logs.csv")
         
@@ -187,5 +184,5 @@ def consolidate_all_game_logs(seasons: list, season_to_update: list[str]):
 
 def update_data(seasons: list):
     save_teams_logs_per_season(seasons)
-    fetch_defensive_stats(seasons, season_segment="Pre All-Star")
+    fetch_defensive_stats(seasons, season_segment="Post All-Star")
     merge_defensive_stats_to_game_logs(seasons)

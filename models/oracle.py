@@ -63,8 +63,8 @@ class Oracle:
         """
         Init predictor for shot attempts
         """
-        attempts_predictor_config = {"type": "Normal", "input_shape": input_shape, "output_shape": 1, "validation_split": .15,
-          "activation_func": "relu", "learning_rate": 1e-3, "output_activation_func": "relu", "verbose": 0,
+        attempts_predictor_config = {"type": "Normal", "input_shape": input_shape, "output_shape": 1, "validation_split": .05,
+          "activation_func": "relu", "learning_rate": 2e-3, "output_activation_func": "relu", "verbose": 0,
           "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 300,
           "timesteps": 0, "scaling_method": "standard"}
 
@@ -141,7 +141,7 @@ class Oracle:
         :param filtered_players_logs: players' game logs
         """
         empty_logs = filtered_players_logs.empty
-        doesnt_play = filtered_players_logs["MIN"].values[:self.model_config["timesteps"]].mean() <= 8
+        doesnt_play = filtered_players_logs["MIN"].values[:self.model_config["timesteps"]].mean() <= 10.0
         if self.model_config["type"] == "GRU":
             min_games = self.model_config["timesteps"] * 8
         else:

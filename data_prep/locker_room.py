@@ -102,7 +102,7 @@ class LockerRoom:
             update_data(current_season)
             consolidate_all_game_logs(collected_seasons, current_season)
 
-        self.all_logs = pd.read_csv("data/all_logs.csv", index_col=0, low_memory=False)
+        self.all_logs = pd.read_csv("data/all_logs.csv", low_memory=False)
 
     @staticmethod
     def _pause_for_configurations() -> int:

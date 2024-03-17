@@ -1,3 +1,4 @@
 output/
-data/
-artifact/
+data/seasonal_data
+data/all_logs.csv
+artifacts/active_players.json
