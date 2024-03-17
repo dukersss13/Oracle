@@ -46,7 +46,7 @@ class NeuralNet:
         model.add(Input(shape=(self.input_shape, )))
         model.add(Dense(128, activation=self.activation_func))
         model.add(Dense(128, activation=self.activation_func))
-        model.add(Dropout(0.2)) # Ray Allen
+        model.add(Dropout(0.1))
         model.add(Dense(81, activation=self.activation_func)) # Kobe
         model.add(Dense(1, activation=self.output_activation_func))
 
@@ -58,10 +58,9 @@ class NeuralNet:
         model.add(BatchNormalization())
         model.add(GRU(units=128, kernel_regularizer=regularizers.l1(1e-3), dropout=0.2, unroll=True, return_sequences=True))
         model.add(GRU(units=128, unroll=True, return_sequences=True))
-        model.add(GRU(units=128, unroll=True, kernel_regularizer=regularizers.l2(1e-3)))
+        model.add(GRU(units=128, unroll=True, kernel_regularizer=regularizers.l2(1e-3), dropout=0.2))
         model.add(Dense(128, activation=self.activation_func))
-        model.add(Dense(128, activation=self.activation_func))
-        model.add(Dropout(0.2))
+        model.add(Dropout(0.2)) # Ray Allen
         model.add(Dense(1, activation=self.output_activation_func))
 
         return model
@@ -88,7 +87,7 @@ class NeuralNet:
         elif scaling_method.lower() == "minmax":
             self.scaler = MinMaxScaler()
         
-        return self.scaler.fit_transform(X).astype(np.float32)
+        return self.scaler.fit_transform(X)
     
     def scale_test(self, X_test: np.ndarray) -> np.ndarray:
         """
@@ -102,7 +101,7 @@ class NeuralNet:
         else:
             X_test = self.scaler.transform(X_test)
 
-        return X_test.astype(np.float32)
+        return X_test
 
     def compile_model(self, learning_rate: float, loss_function: str,
                       optimizer_function: str, metrics: str):
@@ -162,7 +161,7 @@ class NeuralNet:
             x_train = self.reshape_input_shape(x_train)
             x_test = x_test.reshape(1, self.timesteps, x_test.shape[1])
 
-        self.model.fit(x_train, y_train, batch_size=32, epochs=self.nn_config["epochs"], callbacks=callbacks,
+        self.model.fit(x_train, y_train, batch_size=24, epochs=self.nn_config["epochs"], callbacks=[callbacks],
                        verbose=self.nn_config["verbose"], validation_split=self.nn_config["validation_split"])
 
         forecasted_values = int(self.model.predict(x_test))

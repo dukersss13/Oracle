@@ -56,15 +56,15 @@ class Oracle:
         cols_to_drop = ["GAME_DATE_player", "FGM", "FG3M_player", "FTM"]
         x_train, y_train = player_game_logs.iloc[1:, :-1].drop(cols_to_drop, axis=1), player_game_logs.iloc[1:, -1]
 
-        return x_train, y_train.values.astype(np.float32)
+        return x_train.values.astype(np.float32), y_train.values.astype(np.float32)
 
     @staticmethod
     def init_attempts_predictor(input_shape: int) -> NeuralNet:
         """
         Init predictor for shot attempts
         """
-        attempts_predictor_config = {"type": "Normal", "input_shape": input_shape, "output_shape": 1, "validation_split": .10,
-          "activation_func": "relu", "learning_rate": 2e-4, "output_activation_func": "relu", "verbose": 0,
+        attempts_predictor_config = {"type": "Normal", "input_shape": input_shape, "output_shape": 1, "validation_split": .15,
+          "activation_func": "relu", "learning_rate": 1e-3, "output_activation_func": "relu", "verbose": 0,
           "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 300,
           "timesteps": 0, "scaling_method": "standard"}
 
@@ -143,7 +143,7 @@ class Oracle:
         empty_logs = filtered_players_logs.empty
         doesnt_play = filtered_players_logs["MIN"].values[:self.model_config["timesteps"]].mean() <= 8
         if self.model_config["type"] == "GRU":
-            min_games = self.model_config["timesteps"] * 10
+            min_games = self.model_config["timesteps"] * 8
         else:
             min_games = 20
 
@@ -192,7 +192,7 @@ class Oracle:
             players_done += 1
 
             print(f"Finished forecasting for: {players_name}")
-            print(f"\n{players_done}/{total_players} players done for the {data.team_name}")
+            print(f"\n{players_done}/{total_players} players done for the {data.team_name}")    
 
         forecast_df = self.form_forecast_df(forecast_dict)
 

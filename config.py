@@ -11,10 +11,10 @@ features = ["MIN", "GAME_DATE_player",
 
 game_details = {"home_team": "Lakers", "away_team": "Warriors", "game_date": "03-16-2024", "new_game": True}
 
-nn_config = {"type": "GRU", "input_shape": len(features)-5, "output_shape": 1, "validation_split": .20,
-             "activation_func": "relu", "learning_rate": 3e-4, "output_activation_func": "relu", "verbose": False,
+nn_config = {"type": "GRU", "input_shape": len(features)-5, "output_shape": 1, "validation_split": .10,
+             "activation_func": "relu", "learning_rate": 3e-4, "output_activation_func": "relu", "verbose": True,
              "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 600, 
-             "timesteps": 5, "scaling_method": "standard"}
+             "timesteps": 3, "scaling_method": "standard"}
 
 oracle_config = {"model": "NN", "features": features, "holdout": True, "save_file": True, "fetch_new_data": True}
 

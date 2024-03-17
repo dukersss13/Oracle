@@ -250,7 +250,6 @@ class LockerRoom:
                 except IndexError:
                     actual_points = 0
             all_logs = all_logs[all_logs["GAME_DATE_player"] < self.game_date]
-            all_logs.dropna(inplace=True)
 
         return all_logs, actual_points
     
@@ -317,11 +316,13 @@ class LockerRoom:
         Merge the opposing defense stats
         to the player's log
         """
+        self.all_logs.dropna(inplace=True)
         players_game_log = players_game_log.rename(columns={"Game_ID": "GAME_ID"})
         players_game_log["GAME_ID"] = players_game_log["GAME_ID"].astype(int)
         log_with_defensive_stats = players_game_log.merge(self.all_logs, how="left", 
-                                                          on=["GAME_ID"],
-                                                          suffixes=["_player", "_opp_defense"])
+                                                          on=["TEAM_ID"],
+                                                          suffixes=["_player",
+                                                                    "_opp_defense"]).drop_duplicates(subset=["GAME_ID_player"])
 
         return log_with_defensive_stats
 
