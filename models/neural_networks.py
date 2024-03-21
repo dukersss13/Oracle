@@ -32,6 +32,7 @@ class NeuralNet:
         self.activation_func = nn_config["activation_func"]
         self.output_activation_func = nn_config["output_activation_func"]
         self.timesteps = nn_config["timesteps"]
+        self.scaler = None
 
     def _create_neural_network(self) -> Sequential:
         if self.nn_config["type"] == "GRU":
@@ -44,9 +45,9 @@ class NeuralNet:
     def _create_sequential_nn(self) -> Sequential:
         model = Sequential()
         model.add(Input(shape=(self.input_shape, )))
-        model.add(BatchNormalization())
         model.add(Dense(128, activation=self.activation_func))
         model.add(Dense(128, activation=self.activation_func))
+        model.add(Dropout(0.13))
         model.add(Dense(81, activation=self.activation_func)) # Kobe
         model.add(Dense(1, activation=self.output_activation_func))
 
@@ -56,8 +57,8 @@ class NeuralNet:
         model = Sequential()
         model.add(Input(shape=(self.timesteps, self.input_shape)))
         model.add(BatchNormalization())
-        model.add(GRU(units=128, kernel_regularizer=regularizers.l1(2e-3), dropout=0.2, unroll=True, return_sequences=True))
-        model.add(GRU(units=128, unroll=True, return_sequences=True))
+        model.add(GRU(units=128, unroll=True, dropout=0.2, return_sequences=True))
+        model.add(GRU(units=128, kernel_regularizer=regularizers.l1(2e-3), unroll=True, return_sequences=True))
         model.add(GRU(units=128, unroll=True, kernel_regularizer=regularizers.l2(1e-3), dropout=0.2))
         model.add(Dense(128, activation=self.activation_func))
         model.add(Dense(128, activation=self.activation_func))
@@ -75,18 +76,18 @@ class NeuralNet:
         :return: scaled input
         """
         scaling_method = self.nn_config["scaling_method"]
-        if X.ndim == 1:
-            X = X.reshape(-1, 1)
-
-        if scaling_method not in ["standard", "minmax", None]:
-            raise NotImplementedError(f"Do not recognize {scaling_method} scaling method!")
-
         if scaling_method is None:
             return X
-        elif scaling_method.lower() == "standard":
+
+        if scaling_method.lower() == "standard":
             self.scaler = StandardScaler()
         elif scaling_method.lower() == "minmax":
             self.scaler = MinMaxScaler()
+        else:
+            raise NotImplementedError(f"Do not recognize {scaling_method} scaling method!")
+        
+        if X.ndim == 1:
+            X = X.reshape(-1, 1)
         
         return self.scaler.fit_transform(X)
     
@@ -94,15 +95,14 @@ class NeuralNet:
         """
         Scale the testing inputs
         """
-        if X_test.ndim == 1:
-            X_test = X_test.reshape(1, -1)
-
         if self.scaler is None:
             X_test = X_test
         else:
+            if X_test.ndim == 1:
+                X_test = X_test.reshape(1, -1)
             X_test = self.scaler.transform(X_test)
 
-        return X_test
+        return X_test.astype(np.float32)
 
     def compile_model(self, learning_rate: float, loss_function: str,
                       optimizer_function: str, metrics: str):
@@ -124,7 +124,7 @@ class NeuralNet:
 
         return model
 
-    @tf.function(reduce_retracing=True)
+    @tf.function(experimental_relax_shapes=True, reduce_retracing=True)
     def predict(self, x_test: np.ndarray) -> float:
         """
         Run prediction
@@ -132,7 +132,7 @@ class NeuralNet:
         :param test_data: testing input
         :return: prediction of the points
         """
-        return self.model.predict(x_test)
+        return self.model(x_test)
 
     def reshape_input_shape(self, input_array: np.ndarray) -> np.ndarray:
         """
@@ -144,6 +144,23 @@ class NeuralNet:
             input_array = input_array[:-remainder]
 
         return input_array.reshape(batch_size, self.timesteps, input_array.shape[1])
+    
+    @staticmethod
+    def plot_val_loss(history):
+        """
+        Plot val vs. training loss
+
+        :param history: history of trained model
+        """
+        import matplotlib.pyplot as plt
+        # Plot training and validation loss
+        plt.plot(history.history["loss"], label="Training Loss")
+        plt.plot(history.history["val_loss"], label="Validation Loss")
+        plt.title("Training and Validation Loss Over Epochs")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.legend()
+        plt.show()
 
     def get_forecast(self, training_data: Tuple[np.ndarray, np.ndarray], x_test: np.ndarray) -> int:
         """
@@ -152,9 +169,10 @@ class NeuralNet:
         :param training_data: training data
         :param x_test: testing input
         """
-        callbacks = EarlyStopping(monitor="val_loss", min_delta=1e-6, patience=500, restore_best_weights=True)
+        callbacks = EarlyStopping(monitor="val_loss", min_delta=1e-6, patience=self.nn_config["patience"], restore_best_weights=True)
 
         x_train, y_train = training_data
+
         x_train = self.scale_input(x_train)
         x_test = self.scale_test(x_test)
 
@@ -162,9 +180,12 @@ class NeuralNet:
             x_train = self.reshape_input_shape(x_train)
             x_test = x_test.reshape(1, self.timesteps, x_test.shape[1])
 
-        self.model.fit(x_train, y_train, batch_size=24, epochs=self.nn_config["epochs"], callbacks=[callbacks],
-                       verbose=self.nn_config["verbose"], validation_split=self.nn_config["validation_split"])
+        x_train, y_train = tf.convert_to_tensor(x_train, dtype=tf.float32), tf.convert_to_tensor(y_train, dtype=tf.float32)
+        x_test = tf.convert_to_tensor(x_test, dtype=tf.float32)
 
-        forecasted_values = int(self.model.predict(x_test))
+        _ = self.model.fit(x_train, y_train, batch_size=24, epochs=self.nn_config["epochs"], callbacks=[callbacks],
+                           verbose=self.nn_config["verbose"], validation_split=self.nn_config["validation_split"])
+
+        forecasted_values = int(np.round(self.predict(x_test)))
 
         return forecasted_values

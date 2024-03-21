@@ -9,12 +9,12 @@ features = ["MIN", "GAME_DATE_player",
             "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT",
             "E_PACE", "E_DEF_RATING", "PTS"]
 
-game_details = {"home_team": "Kings", "away_team": "Knicks", "game_date": "03-16-2024", "new_game": False}
+game_details = {"home_team": "Cavaliers", "away_team": "Heat", "game_date": "03-20-2024", "new_game": False}
 
-nn_config = {"type": "GRU", "input_shape": len(features)-5, "output_shape": 1, "validation_split": .10,
-             "activation_func": "relu", "learning_rate": 1e-3, "output_activation_func": "relu", "verbose": False,
-             "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 600, 
-             "timesteps": 3, "scaling_method": "standard"}
+nn_config = {"type": "GRU", "input_shape": len(features)-5, "output_shape": 1, "validation_split": .15,
+             "activation_func": "relu", "learning_rate": 2e-3, "output_activation_func": "relu", "verbose": False,
+             "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 800, 
+             "timesteps": 5, "scaling_method": "standard", "patience": 400}
 
 oracle_config = {"model": "NN", "features": features, "holdout": True, "save_file": True, "fetch_new_data": False}
 
