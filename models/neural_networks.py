@@ -120,11 +120,11 @@ class NeuralNet:
             optimizer_function = SGD(learning_rate)
 
         model = self._create_neural_network()
-        model.compile(loss=loss_function, optimizer=optimizer_function, metrics=metrics)
+        model.compile(loss=loss_function, optimizer=optimizer_function, metrics=[metrics])
 
         return model
 
-    @tf.function(experimental_relax_shapes=True, reduce_retracing=True)
+    @tf.function(reduce_retracing=True)
     def predict(self, x_test: np.ndarray) -> float:
         """
         Run prediction

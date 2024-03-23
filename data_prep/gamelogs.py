@@ -165,7 +165,7 @@ def consolidate_all_game_logs(seasons: list, season_to_update: list[str]):
             team_log = pd.read_csv(f"{dir}/{filename}", index_col=0)
             season_team_logs.append(team_log)
         season_team_logs: pd.DataFrame = pd.concat(season_team_logs, axis=0)
-    season_team_logs.to_csv(f"{dir}/all_logs.csv")
+        season_team_logs.to_csv(f"{dir}/all_logs.csv")
 
     all_logs = []
     for season in seasons:
@@ -184,5 +184,5 @@ def consolidate_all_game_logs(seasons: list, season_to_update: list[str]):
 
 def update_data(seasons: list):
     save_teams_logs_per_season(seasons)
-    fetch_defensive_stats(seasons, season_segment="Post All-Star")
+    fetch_defensive_stats(seasons, season_segment="Pre All-Star")
     merge_defensive_stats_to_game_logs(seasons)

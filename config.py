@@ -1,6 +1,6 @@
 features = ["MIN", "GAME_DATE_player",
             "FGM", "FGA", "FG_PCT",
-            "FG3M_player","FG3A_player", "FG3_PCT_player",
+            "FG3M_player", "FG3A_player", "FG3_PCT_player",
             "FTM", "FTA", "FT_PCT",
             "HOME", "AWAY", "REST_DAYS",
             "D_FGM", "D_FGA", "D_FG_PCT",
@@ -9,12 +9,12 @@ features = ["MIN", "GAME_DATE_player",
             "FGM_LT_10", "FGA_LT_10", "LT_10_PCT", "NS_LT_10_PCT",
             "E_PACE", "E_DEF_RATING", "PTS"]
 
-game_details = {"home_team": "Cavaliers", "away_team": "Heat", "game_date": "03-20-2024", "new_game": False}
+game_details = {"home_team": "Lakers", "away_team": "76ers", "game_date": "03-22-2024", "new_game": False}
 
 nn_config = {"type": "GRU", "input_shape": len(features)-5, "output_shape": 1, "validation_split": .15,
              "activation_func": "relu", "learning_rate": 2e-3, "output_activation_func": "relu", "verbose": False,
-             "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 800, 
-             "timesteps": 5, "scaling_method": "standard", "patience": 400}
+             "loss_function": "MSE", "optimizer_function": "Adam", "metrics": "mean_squared_error", "epochs": 1000, 
+             "timesteps": 4, "scaling_method": "standard", "patience": 500}
 
 oracle_config = {"model": "NN", "features": features, "holdout": True, "save_file": True, "fetch_new_data": False}
 

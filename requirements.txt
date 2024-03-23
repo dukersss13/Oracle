@@ -3,6 +3,7 @@ xgboost
 scikit-learn 
 pandas
 openpyxl
-# matplotlib
+matplotlib
 nba_api
-tensorflow==2.11
+tensorflow
+bs4

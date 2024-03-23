@@ -16,7 +16,7 @@ pd.set_option('mode.chained_assignment', None)
 pd.set_option('display.max_columns', None)
 
 
-current_season = ["2023-24"]
+current_season = ["2023-24", "2022-23", "2021-22"]
 collected_seasons = ["2023-24", "2022-23", "2021-22"]
 
 class Team(Enum):
@@ -234,13 +234,15 @@ class LockerRoom:
         :param players_full_name: full name of the player
         :return filtered_log.values: an array of player's game logs filtered by specific columns
         """
-        all_logs = pd.DataFrame([])
+        all_logs = []
         for season in collected_seasons:
             try:
                 players_game_logs_df = self.fetch_players_game_logs_df(players_id, season)
-                all_logs = pd.concat([all_logs, players_game_logs_df])
+                if not players_game_logs_df.empty:
+                    all_logs.append(players_game_logs_df)
             except:
                 print(f"Logs for playerID: {players_id.values[0]} for {season} cannot be fetched.")
+        all_logs = pd.concat(all_logs, axis=0)
         actual_points = 0   
         if not all_logs.empty:
             all_logs: pd.DataFrame = self._add_predictors_to_players_log(all_logs)
@@ -306,7 +308,7 @@ class LockerRoom:
         players_game_logs_df = players_game_logs_df[players_game_logs_df["GAME_DATE"] <= self.game_date]
         players_game_logs_df["REST_DAYS"] = players_game_logs_df["GAME_DATE"].diff(periods=-1)
         players_game_logs_df = players_game_logs_df.iloc[:-1, :]
-        players_game_logs_df.loc[:, "REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
+        players_game_logs_df[ "REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
         players_game_logs_df["TEAM_ID"] = players_game_logs_df["MATCHUP"].apply(self.get_opp_id)
 
         return players_game_logs_df
