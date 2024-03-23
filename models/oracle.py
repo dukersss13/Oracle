@@ -41,6 +41,8 @@ class Oracle:
 
         if model == "NN":
             self.points_predictor = NeuralNet(self.model_config)
+            self.fga_predictor = Oracle.init_attempts_predictor(input_shape=1)
+            self.fg3a_predictor = Oracle.init_attempts_predictor(input_shape=2)
         elif model == "XGBOOST":
             self.points_predictor = XGBoost(self.model_config)
         else:
@@ -91,8 +93,8 @@ class Oracle:
         testing_mins = self.get_player_mins(players_full_name, player_game_logs, team)
 
         # Use mins to forecast fga
-        fga_predictor = Oracle.init_attempts_predictor(input_shape=1)
-        fga = round(fga_predictor.get_forecast(data_for_fga_pred, testing_mins))
+        
+        fga = round(self.fga_predictor.get_forecast(data_for_fga_pred, testing_mins))
         
         # Use defensive stats to forecast fg3a & fta
         if player_game_logs["FG3A_player"].mean() <= 5:
@@ -100,8 +102,7 @@ class Oracle:
         else:
             data_for_fg3a_pred = self.locker_room.prepare_training_data(player_game_logs,
                                                                         ["MIN", "FGA"], "FG3A_player")
-            fg3a_predictor = Oracle.init_attempts_predictor(input_shape=2)
-            fg3a = fg3a_predictor.get_forecast(data_for_fg3a_pred,
+            fg3a = self.fg3a_predictor.get_forecast(data_for_fg3a_pred,
                                                np.concatenate([testing_mins, [fga]]))
 
         fta = round(player_game_logs["FTA"].values[:timesteps].mean())

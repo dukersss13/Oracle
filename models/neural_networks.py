@@ -184,7 +184,7 @@ class NeuralNet:
         x_test = tf.convert_to_tensor(x_test, dtype=tf.float32)
 
         _ = self.model.fit(x_train, y_train, batch_size=24, epochs=self.nn_config["epochs"], callbacks=[callbacks],
-                           verbose=self.nn_config["verbose"], validation_split=self.nn_config["validation_split"])
+                        verbose=self.nn_config["verbose"], validation_split=self.nn_config["validation_split"])
 
         forecasted_values = int(np.round(self.predict(x_test)))
 
