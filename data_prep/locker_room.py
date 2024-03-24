@@ -308,7 +308,8 @@ class LockerRoom:
         players_game_logs_df = players_game_logs_df[players_game_logs_df["GAME_DATE"] <= self.game_date]
         players_game_logs_df["REST_DAYS"] = players_game_logs_df["GAME_DATE"].diff(periods=-1)
         players_game_logs_df = players_game_logs_df.iloc[:-1, :]
-        players_game_logs_df[ "REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
+        players_game_logs_df["REST_DAYS"] = players_game_logs_df["REST_DAYS"].dt.days
+        players_game_logs_df.loc[players_game_logs_df["REST_DAYS"] > 7, "REST_DAYS"] = 1
         players_game_logs_df["TEAM_ID"] = players_game_logs_df["MATCHUP"].apply(self.get_opp_id)
 
         return players_game_logs_df
