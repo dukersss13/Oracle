@@ -22,10 +22,12 @@ Oracle is an NBA forecasting model that leverages data from [nba_api](https://gi
 Forecast: Hawks 108 - 131 Lakers.
 Actual: Hawks 105 - 136 Lakers.
 
-
+**Oracle Forecast**
 ![image](https://github.com/user-attachments/assets/096cf237-1653-4a8b-abda-b46854d639fd)
-![image](https://github.com/user-attachments/assets/945f5aeb-4c6d-4860-9996-cddec2a43271)
-![image](https://github.com/user-attachments/assets/20b2ffaf-bc80-4c6d-af20-37b82e08cafc)
+
+| Hawks | Lakers |
+| ------- | ------- |
+| ![Image 1]([https://via.placeholder.com/150](https://github.com/user-attachments/assets/945f5aeb-4c6d-4860-9996-cddec2a43271)) | ![Image 2]([https://via.placeholder.com/150](https://github.com/user-attachments/assets/20b2ffaf-bc80-4c6d-af20-37b82e08cafc)) |
 
 #### Game 2: Nuggets @ Spurs. March 15th, 2024.
 [Box Score](https://www.google.com/search?q=spurs+vs+nuggets+2024&sca_esv=02ef9b5328b381af&rlz=1C5GCEM_enUS1102US1102&sxsrf=ADLYWIJT3x2ykkHGo5dtogK_nk1UDZXXGA%3A1731016471558&ei=FzctZ-HpIY3KkPIPmrWiqQE&ved=0ahUKEwih0YzvmsuJAxUNJUQIHZqaKBUQ4dUDCA8&uact=5&oq=spurs+vs+nuggets+2024&gs_lp=Egxnd3Mtd2l6LXNlcnAiFXNwdXJzIHZzIG51Z2dldHMgMjAyNDIFEAAYgAQyCxAAGIAEGIYDGIoFMgsQABiABBiGAxiKBTIIEAAYogQYiQUyCBAAGKIEGIkFMggQABiiBBiJBUjVIFCMBVjaH3AFeAGQAQCYAVygAdELqgECMjW4AQPIAQD4AQGYAh6gAq8MwgIKEAAYsAMY1gQYR8ICERAuGIAEGJECGMcBGIoFGK8BwgIREC4YgAQYkQIY0QMYxwEYigXCAgoQABiABBhDGIoFwgIKEC4YgAQYQxiKBcICIBAuGIAEGJECGMcBGIoFGK8BGJcFGNwEGN4EGOAE2AEBwgIKECMYgAQYJxiKBcICChAuGIAEGCcYigXCAgsQABiABBiRAhiKBcICERAuGIAEGJECGLEDGIMBGIoFwgIQEC4YgAQYxwEYJxiKBRivAcICEBAAGIAEGLEDGEMYgwEYigXCAh0QLhiABBjHARiKBRivARiXBRjcBBjeBBjgBNgBAcICEBAuGIAEGLEDGEMYgwEYigXCAgsQLhiABBixAxiDAcICCxAAGIAEGLEDGIMBwgIOEAAYgAQYsQMYgwEYigXCAgoQABiABBgUGIcCwgIGEAAYFhgewgIFECEYoAGYAwCIBgGQBgi6BgYIARABGBSSBwIzMKAHgbgB&sclient=gws-wiz-serp#sie=m;/g/11vchf1k3q;3;/m/05jvx;dt;fp;1;;;)
