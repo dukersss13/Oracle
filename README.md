@@ -37,6 +37,7 @@ Actual: Hawks 105 - 136 Lakers.
 
 
 
+
 #### Game 2: Nuggets @ Spurs. March 15th, 2024.
 [Box Score](https://www.google.com/search?q=spurs+vs+nuggets+2024&sca_esv=02ef9b5328b381af&rlz=1C5GCEM_enUS1102US1102&sxsrf=ADLYWIJT3x2ykkHGo5dtogK_nk1UDZXXGA%3A1731016471558&ei=FzctZ-HpIY3KkPIPmrWiqQE&ved=0ahUKEwih0YzvmsuJAxUNJUQIHZqaKBUQ4dUDCA8&uact=5&oq=spurs+vs+nuggets+2024&gs_lp=Egxnd3Mtd2l6LXNlcnAiFXNwdXJzIHZzIG51Z2dldHMgMjAyNDIFEAAYgAQyCxAAGIAEGIYDGIoFMgsQABiABBiGAxiKBTIIEAAYogQYiQUyCBAAGKIEGIkFMggQABiiBBiJBUjVIFCMBVjaH3AFeAGQAQCYAVygAdELqgECMjW4AQPIAQD4AQGYAh6gAq8MwgIKEAAYsAMY1gQYR8ICERAuGIAEGJECGMcBGIoFGK8BwgIREC4YgAQYkQIY0QMYxwEYigXCAgoQABiABBhDGIoFwgIKEC4YgAQYQxiKBcICIBAuGIAEGJECGMcBGIoFGK8BGJcFGNwEGN4EGOAE2AEBwgIKECMYgAQYJxiKBcICChAuGIAEGCcYigXCAgsQABiABBiRAhiKBcICERAuGIAEGJECGLEDGIMBGIoFwgIQEC4YgAQYxwEYJxiKBRivAcICEBAAGIAEGLEDGEMYgwEYigXCAh0QLhiABBjHARiKBRivARiXBRjcBBjeBBjgBNgBAcICEBAuGIAEGLEDGEMYgwEYigXCAgsQLhiABBixAxiDAcICCxAAGIAEGLEDGIMBwgIOEAAYgAQYsQMYgwEYigXCAgoQABiABBgUGIcCwgIGEAAYFhgewgIFECEYoAGYAwCIBgGQBgi6BgYIARABGBSSBwIzMKAHgbgB&sclient=gws-wiz-serp#sie=m;/g/11vchf1k3q;3;/m/05jvx;dt;fp;1;;;)
 Forecast: Spurs 106 - 121 Nuggets.
@@ -51,8 +52,9 @@ Actual: Spurs 106 - 117 Nuggets.
 **Real Box Score**
 
 ![Screenshot 2024-11-07 at 2 20 35 PM](https://github.com/user-attachments/assets/cfb65ac4-8c8c-4580-ad6a-21602ab4a5d7)
-![Screenshot 2024-11-07 at 2 13 33 PM](https://github.com/user-attachments/assets/74363f17-5db9-43b9-84e3-6503ee602bf4)
-![Screenshot 2024-11-07 at 2 13 51 PM](https://github.com/user-attachments/assets/1bba7be6-95e6-459f-a407-f212d1c4cffa)
+![Screenshot 2024-11-07 at 2 00 21 PM](https://github.com/user-attachments/assets/1bf27e09-a301-4a5d-85a6-0bf6e539417a)
+![Screenshot 2024-11-07 at 2 00 29 PM](https://github.com/user-attachments/assets/594d4ab9-cae4-458d-95a4-c4592dabf0bc)
+
 
 
 
