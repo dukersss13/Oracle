@@ -31,8 +31,9 @@ Actual: Hawks 105 - 136 Lakers.
 **Real Box Score**
 
 ![Screenshot 2024-11-07 at 2 13 25 PM](https://github.com/user-attachments/assets/ecfed88e-5e2d-475f-8679-3c1d82a6a743)
-![Screenshot 2024-11-07 at 2 00 29 PM](https://github.com/user-attachments/assets/da290be2-0346-4910-8e0e-a9345e652059)
-![Screenshot 2024-11-07 at 2 00 21 PM](https://github.com/user-attachments/assets/248e0ed7-22c6-4ea2-a16a-2f8269360b60)
+![Screenshot 2024-11-07 at 2 13 33 PM](https://github.com/user-attachments/assets/c700eddc-53f9-45eb-8983-e5a4fbe09ee9)
+![Screenshot 2024-11-07 at 2 13 51 PM](https://github.com/user-attachments/assets/e774cbe0-ba3e-48e5-92bf-c1604a0da705)
+
 
 
 
