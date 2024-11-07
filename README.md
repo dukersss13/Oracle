@@ -12,7 +12,8 @@ Oracle is an NBA forecasting model that leverages data from [nba_api](https://gi
 4. Data Preprocessing extracts offensive features mentioned above along with the opposing team's defensive metrics. The model also takes into account
 5. Forecasts will be done for each individual player, as each player will have a custom trained model on their game logs. Team forecast is the aggregation of all individual player's forecast.
 
-![image](https://github.com/user-attachments/assets/26810daf-f3f9-4b86-805c-9ff2da9846cd)
+![image](https://github.com/user-attachments/assets/4cc19c63-9beb-4f34-9152-bae9bafc76f4)
+
 
 
 ### Oracle in Action
