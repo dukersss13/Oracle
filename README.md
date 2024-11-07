@@ -29,6 +29,7 @@ Actual: Hawks 105 - 136 Lakers.
 
 
 **Real Box Score**
+
 ![Screenshot 2024-11-07 at 2 13 25 PM](https://github.com/user-attachments/assets/ecfed88e-5e2d-475f-8679-3c1d82a6a743)
 ![Screenshot 2024-11-07 at 2 13 33 PM](https://github.com/user-attachments/assets/f8d2302f-514a-485a-81c4-f46a7329fa9a)
 ![Screenshot 2024-11-07 at 2 13 51 PM](https://github.com/user-attachments/assets/7e9f24ec-b8cf-47f5-aa5f-07df29ab6122)
@@ -47,10 +48,9 @@ Actual: Spurs 106 - 117 Nuggets.
 
 
 **Real Box Score**
+
 ![Screenshot 2024-11-07 at 2 20 35 PM](https://github.com/user-attachments/assets/cfb65ac4-8c8c-4580-ad6a-21602ab4a5d7)
-
 ![Screenshot 2024-11-07 at 2 13 33 PM](https://github.com/user-attachments/assets/74363f17-5db9-43b9-84e3-6503ee602bf4)
-
 ![Screenshot 2024-11-07 at 2 13 51 PM](https://github.com/user-attachments/assets/1bba7be6-95e6-459f-a407-f212d1c4cffa)
 
 
