@@ -25,11 +25,14 @@ Actual: Hawks 105 - 136 Lakers.
 
 **Oracle Forecast**
 
-![image](https://github.com/user-attachments/assets/096cf237-1653-4a8b-abda-b46854d639fd)
+![Screenshot 2024-11-07 at 2 13 08 PM](https://github.com/user-attachments/assets/e60f2161-d5e0-443d-928b-1e39197eba6b)
+
 
 **Real Box Score**
-![image](https://github.com/user-attachments/assets/945f5aeb-4c6d-4860-9996-cddec2a43271)"
-![image](https://github.com/user-attachments/assets/20b2ffaf-bc80-4c6d-af20-37b82e08cafc)"
+![Screenshot 2024-11-07 at 2 13 25 PM](https://github.com/user-attachments/assets/ecfed88e-5e2d-475f-8679-3c1d82a6a743)
+![Screenshot 2024-11-07 at 2 13 33 PM](https://github.com/user-attachments/assets/f8d2302f-514a-485a-81c4-f46a7329fa9a)
+![Screenshot 2024-11-07 at 2 13 51 PM](https://github.com/user-attachments/assets/7e9f24ec-b8cf-47f5-aa5f-07df29ab6122)
+
 
 
 #### Game 2: Nuggets @ Spurs. March 15th, 2024.
@@ -37,12 +40,18 @@ Actual: Hawks 105 - 136 Lakers.
 Forecast: Spurs 106 - 121 Nuggets.
 Actual: Spurs 106 - 117 Nuggets.
 
+
 **Oracle Forecast**
-![image](https://github.com/user-attachments/assets/b055c247-533b-49eb-b764-eb51c6102ef7)
+
+![forecast](https://github.com/user-attachments/assets/8b1e90aa-a446-4478-8cab-010db6e735a0)
+
 
 **Real Box Score**
-![image](https://github.com/user-attachments/assets/526e897c-f22f-44a7-a758-e5ba816cef4a)
-![image](https://github.com/user-attachments/assets/9675079b-8d20-4968-bd2d-2186a6696221)
+![Screenshot 2024-11-07 at 2 20 35 PM](https://github.com/user-attachments/assets/cfb65ac4-8c8c-4580-ad6a-21602ab4a5d7)
+
+![Screenshot 2024-11-07 at 2 13 33 PM](https://github.com/user-attachments/assets/74363f17-5db9-43b9-84e3-6503ee602bf4)
+
+![Screenshot 2024-11-07 at 2 13 51 PM](https://github.com/user-attachments/assets/1bba7be6-95e6-459f-a407-f212d1c4cffa)
 
 
 
