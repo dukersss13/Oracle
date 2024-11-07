@@ -27,20 +27,20 @@ Actual: Hawks 105 - 136 Lakers.
 
 ![image](https://github.com/user-attachments/assets/096cf237-1653-4a8b-abda-b46854d639fd)
 
+**Real Box Score**
+![image](https://github.com/user-attachments/assets/945f5aeb-4c6d-4860-9996-cddec2a43271)"
+![image](https://github.com/user-attachments/assets/20b2ffaf-bc80-4c6d-af20-37b82e08cafc)"
 
-<div align="center">
-
-<img src="[path/to/image1.png](https://github.com/user-attachments/assets/945f5aeb-4c6d-4860-9996-cddec2a43271)" width="45%" />
-<img src="[path/to/image2.png](https://github.com/user-attachments/assets/20b2ffaf-bc80-4c6d-af20-37b82e08cafc)" width="45%" />
-
-</div>
 
 #### Game 2: Nuggets @ Spurs. March 15th, 2024.
 [Box Score](https://www.google.com/search?q=spurs+vs+nuggets+2024&sca_esv=02ef9b5328b381af&rlz=1C5GCEM_enUS1102US1102&sxsrf=ADLYWIJT3x2ykkHGo5dtogK_nk1UDZXXGA%3A1731016471558&ei=FzctZ-HpIY3KkPIPmrWiqQE&ved=0ahUKEwih0YzvmsuJAxUNJUQIHZqaKBUQ4dUDCA8&uact=5&oq=spurs+vs+nuggets+2024&gs_lp=Egxnd3Mtd2l6LXNlcnAiFXNwdXJzIHZzIG51Z2dldHMgMjAyNDIFEAAYgAQyCxAAGIAEGIYDGIoFMgsQABiABBiGAxiKBTIIEAAYogQYiQUyCBAAGKIEGIkFMggQABiiBBiJBUjVIFCMBVjaH3AFeAGQAQCYAVygAdELqgECMjW4AQPIAQD4AQGYAh6gAq8MwgIKEAAYsAMY1gQYR8ICERAuGIAEGJECGMcBGIoFGK8BwgIREC4YgAQYkQIY0QMYxwEYigXCAgoQABiABBhDGIoFwgIKEC4YgAQYQxiKBcICIBAuGIAEGJECGMcBGIoFGK8BGJcFGNwEGN4EGOAE2AEBwgIKECMYgAQYJxiKBcICChAuGIAEGCcYigXCAgsQABiABBiRAhiKBcICERAuGIAEGJECGLEDGIMBGIoFwgIQEC4YgAQYxwEYJxiKBRivAcICEBAAGIAEGLEDGEMYgwEYigXCAh0QLhiABBjHARiKBRivARiXBRjcBBjeBBjgBNgBAcICEBAuGIAEGLEDGEMYgwEYigXCAgsQLhiABBixAxiDAcICCxAAGIAEGLEDGIMBwgIOEAAYgAQYsQMYgwEYigXCAgoQABiABBgUGIcCwgIGEAAYFhgewgIFECEYoAGYAwCIBgGQBgi6BgYIARABGBSSBwIzMKAHgbgB&sclient=gws-wiz-serp#sie=m;/g/11vchf1k3q;3;/m/05jvx;dt;fp;1;;;)
 Forecast: Spurs 106 - 121 Nuggets.
 Actual: Spurs 106 - 117 Nuggets.
 
+**Oracle Forecast**
 ![image](https://github.com/user-attachments/assets/b055c247-533b-49eb-b764-eb51c6102ef7)
+
+**Real Box Score**
 ![image](https://github.com/user-attachments/assets/526e897c-f22f-44a7-a758-e5ba816cef4a)
 ![image](https://github.com/user-attachments/assets/9675079b-8d20-4968-bd2d-2186a6696221)
 
