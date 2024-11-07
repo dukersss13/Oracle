@@ -5,4 +5,5 @@ Oracle is an NBA forecasting model that leverages data from [nba_api](https://gi
 
 
 ### Architecture Overview
+![image](https://github.com/user-attachments/assets/26810daf-f3f9-4b86-805c-9ff2da9846cd)
 
