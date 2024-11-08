@@ -11,16 +11,17 @@ Oracle can fetch the latest data thanks to NBA API library. It only retrieves th
 1. Provide the **Oracle** with the game and model config files.
 2. **Game config**: contains information related to the game. **Model config**: information related to the model chosen for forecast.
 3. Oracle will trigger the LockerRoom class which will fetch data from NBA API, performs data preprocessing steps to prepare the necessary training and testing data.
-4. Data Preprocessing extracts offensive features mentioned above along with the opposing team's defensive metrics. The model also takes into account
+4. Data Preprocessing extracts offensive features of the players (mentioned above) along with the opposing teams' defensive metrics to take into account of the opponents played as well as non-basketball statistics such as `REST_DAYS (int)`, `HOME_OR_AWAY (bool)`.
 5. Forecasts will be done for each individual player, as each player will have a custom trained model on their game logs. Team forecast is the aggregation of all individual player's forecast.
 
-![image](https://github.com/user-attachments/assets/4cc19c63-9beb-4f34-9152-bae9bafc76f4)
+![image](https://github.com/user-attachments/assets/9e6b200e-f585-4cb0-a56a-9a64b7cbf41c)
+
 
 
 
 ### Oracle in Action
 
-#### Game 1: Hawk @ Lakers. March 18th, 2024. 
+#### Game 1: Hawks @ Lakers. March 18th, 2024. 
 [Box Score](https://www.google.com/search?q=hawks+vs+lakers+march+2024&sca_esv=02ef9b5328b381af&rlz=1C5GCEM_enUS1102US1102&sxsrf=ADLYWIIKnHspuFZj6FNYxYIJnNA0o62CcA%3A1731016424803&ei=6DYtZ7TdMPbBkPIP_8He4Q8&ved=0ahUKEwi08ebYmsuJAxX2IEQIHf-gN_wQ4dUDCA8&uact=5&oq=hawks+vs+lakers+march+2024&gs_lp=Egxnd3Mtd2l6LXNlcnAiGmhhd2tzIHZzIGxha2VycyBtYXJjaCAyMDI0MgUQIRigATIFECEYoAEyBRAhGKABMgUQIRigATIFECEYoAFI_EZQkCxYwUFwAXgBkAEAmAF5oAGwDaoBBDI1LjG4AQPIAQD4AQGYAhugAoAOwgIKEAAYsAMY1gQYR8ICBBAjGCfCAgoQIxiABBgnGIoFwgILEAAYgAQYkQIYigXCAgoQABiABBhDGIoFwgIOEC4YgAQYsQMY0QMYxwHCAhQQLhiABBixAxjRAxiDARjHARiKBcICDhAAGIAEGLEDGIMBGIoFwgIQEC4YgAQYxwEYJxiKBRivAcICERAuGIAEGJECGLEDGIMBGIoFwgIREAAYgAQYkQIYsQMYgwEYigXCAhQQLhiABBiRAhixAxiDARjJAxiKBcICCxAAGIAEGJIDGIoFwgIQEAAYgAQYsQMYQxiDARiKBcICCxAAGIAEGLEDGIMBwgIIEAAYgAQYsQPCAgQQABgDwgIIEC4YgAQYsQPCAgoQABiABBgUGIcCwgIFEAAYgATCAgYQABgWGB7CAggQABiABBiiBMICCBAAGKIEGIkFwgIFECEYqwLCAgUQIRifBZgDAIgGAZAGCJIHBDI2LjGgB4KuAQ&sclient=gws-wiz-serp#sie=m;/g/11kt8qf25m;3;/m/05jvx;tb1;fp;1;;;)
 
 Forecast: Hawks 108 - 131 Lakers.
