@@ -28,16 +28,9 @@ Forecast: Hawks 108 - 131 Lakers.
 Actual: Hawks 105 - 136 Lakers.
 
 
-**Oracle Forecast**
+**Oracle Forecast vs. Real Box Score**
 
-![Screenshot 2024-11-07 at 2 13 08 PM](https://github.com/user-attachments/assets/e60f2161-d5e0-443d-928b-1e39197eba6b)
-
-
-**Real Box Score**
-
-![Screenshot 2024-11-07 at 2 13 25 PM](https://github.com/user-attachments/assets/ecfed88e-5e2d-475f-8679-3c1d82a6a743)
-![Screenshot 2024-11-07 at 2 13 33 PM](https://github.com/user-attachments/assets/c700eddc-53f9-45eb-8983-e5a4fbe09ee9)
-![Screenshot 2024-11-07 at 2 13 51 PM](https://github.com/user-attachments/assets/e774cbe0-ba3e-48e5-92bf-c1604a0da705)
+![image](https://github.com/user-attachments/assets/9fc36df0-ce0c-4b34-a09f-bc228f5fd7ef)
 
 
 
@@ -52,16 +45,10 @@ Forecast: Spurs 106 - 121 Nuggets.
 Actual: Spurs 106 - 117 Nuggets.
 
 
-**Oracle Forecast**
+**Oracle Forecast vs. Real Box Score**
 
-![forecast](https://github.com/user-attachments/assets/8b1e90aa-a446-4478-8cab-010db6e735a0)
+![image](https://github.com/user-attachments/assets/9d4721a1-8c67-4f3f-84db-282636c4f340)
 
-
-**Real Box Score**
-
-![Screenshot 2024-11-07 at 2 20 35 PM](https://github.com/user-attachments/assets/cfb65ac4-8c8c-4580-ad6a-21602ab4a5d7)
-![Screenshot 2024-11-07 at 2 00 21 PM](https://github.com/user-attachments/assets/1bf27e09-a301-4a5d-85a6-0bf6e539417a)
-![Screenshot 2024-11-07 at 2 00 29 PM](https://github.com/user-attachments/assets/594d4ab9-cae4-458d-95a4-c4592dabf0bc)
 
 
 
