@@ -14,7 +14,8 @@ Oracle can fetch the latest data thanks to NBA API library. It only retrieves th
 4. Data Preprocessing extracts offensive features of the players (mentioned above) along with the opposing teams' defensive metrics to take into account of the opponents played as well as non-basketball statistics such as `REST_DAYS (int)`, `HOME_OR_AWAY (bool)`.
 5. Forecasts will be done for each individual player, as each player will have a custom trained model on their game logs. Team forecast is the aggregation of all individual player's forecast.
 
-![image](https://github.com/user-attachments/assets/9e6b200e-f585-4cb0-a56a-9a64b7cbf41c)
+![image](https://github.com/user-attachments/assets/0e3d76c0-a570-4f96-9758-1b3a70492474)
+
 
 
 
