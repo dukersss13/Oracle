@@ -16,8 +16,8 @@ pd.set_option('mode.chained_assignment', None)
 pd.set_option('display.max_columns', None)
 
 
-current_season = ["2023-24", "2022-23", "2021-22"]
-collected_seasons = ["2023-24", "2022-23", "2021-22"]
+current_season = ["2024-25", "2023-24", "2022-23", "2021-22"]
+collected_seasons = ["2024-25", "2023-24", "2022-23", "2021-22"]
 
 class Team(Enum):
     HOME = 0
@@ -168,7 +168,8 @@ class LockerRoom:
             team_injury_report = injury_report[injury_report["team"]==full_team_name]
             active_players_df = pd.DataFrame(active_players_json[team], index=["Mins"]).T
             injured_players = team_injury_report["name"].values
-            active_players = active_players_df[(~np.isin(active_players_df.index.values, injured_players) & (active_players_df["Mins"]!=0).values)]
+            active_players = active_players_df[(~np.isin(active_players_df.index.values, injured_players) & \
+                                                          (active_players_df["Mins"]!=0).values)]
             team_data.active_players = team_data.team_roster[np.isin(team_data.team_roster["PLAYER"], active_players.index)].set_index("PLAYER")
             team_data.players_mins = active_players.to_dict()["Mins"]
 

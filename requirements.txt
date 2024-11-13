@@ -1,9 +1,11 @@
 numpy
+pyhocon
 xgboost
-scikit-learn 
+scikit-learn
 pandas
 openpyxl
 matplotlib
 nba_api
+h5py
 tensorflow
-bs4
+beautifulsoup4

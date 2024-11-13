@@ -3,6 +3,7 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import pandas as pd
+from pyhocon import ConfigFactory
 
 from data_prep.locker_room import LockerRoom, Team
 from models.neural_networks import NeuralNet
@@ -10,34 +11,47 @@ from models.ml_models import XGBoost
 
 
 class Oracle:
-    def __init__(self, game_details: dict, oracle_config: dict, model_config: dict):
+    def __init__(self):
         """
         Initialize the Oracle
-
-        :param game_details: dict containing details of game to forecast
-        :param oracle_config: config for Oracle
-        :param nn_config: config Neural Network
         """
-        self.model_config: dict = model_config
+        self._setup_config_files()
+        self.setup_oracle()
+
+    def _setup_config_files(self):
+        """
+        Set up config files
+        """
+        oracle_conf = ConfigFactory.parse_file("oracle.conf")
+        game_details = oracle_conf["game_details"]
         self.game_date: str = game_details["game_date"]
-        self.oracle_config = oracle_config
+        self.oracle_config = oracle_conf["oracle_config"]
 
-        self.locker_room = LockerRoom(game_details, oracle_config["features"],
-                                      oracle_config["fetch_new_data"], oracle_config["holdout"])
-        self.setup_oracle(oracle_config)
+        model_config = ConfigFactory.parse_file("model.conf")
 
-    def setup_oracle(self, oracle_config: dict):
+        model_chosen = self.oracle_config["model"].upper()
+        if model_chosen == "NN":
+            self.model_config = model_config["nn_config"]
+        elif model_chosen == "XGBOOST":
+            self.model_config = model_config["xgboost_config"]
+        else:
+            raise ValueError(f"{model_chosen} is not a valid selection")
+
+        self.locker_room = LockerRoom(game_details, self.oracle_config["features"],
+                                      self.oracle_config["fetch_new_data"], self.oracle_config["holdout"])
+
+    def setup_oracle(self):
         """
         Set the configuration for Oracle
 
         :param oracle_config: config dict for Oracle
         """
         self.scaler = None
-        self.save_output: bool = oracle_config["save_file"]
+        self.save_output: bool = self.oracle_config["save_file"]
         self.output_path: str = "output"
-        self.holdout: bool = oracle_config["holdout"]
+        self.holdout: bool = self.oracle_config["holdout"]
 
-        model = oracle_config["model"].upper()
+        model = self.oracle_config["model"].upper()
 
         if model == "NN":
             self.points_predictor = NeuralNet(self.model_config)

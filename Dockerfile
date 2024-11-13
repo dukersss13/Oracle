@@ -1,9 +1,12 @@
-FROM python:3.9.1
+# Use the official Python 3.9 image as the base image
+FROM python:3.9-slim
 
-WORKDIR /Oracle
+# Set the working directory in the container
+WORKDIR /app
 
-RUN pip install --no-cache-dir --upgrade pip
-
+# Copy requirements.txt into the container at /app
 COPY requirements.txt .
 
-RUN pip install -r requirements.txt
+# Install system dependencies and Python packages
+RUN apt-get update && \
+    pip install --no-cache-dir -r requirements.txt
