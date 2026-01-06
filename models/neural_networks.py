@@ -53,17 +53,18 @@ class NeuralNet:
 
         return model
 
-    def _create_GRU_nn(self) -> Sequential:
-        model = Sequential()
-        model.add(Input(shape=(self.timesteps, self.input_shape)))
-        model.add(BatchNormalization())
-        model.add(GRU(units=128, unroll=True, dropout=0.2, return_sequences=True))
-        model.add(GRU(units=128, kernel_regularizer=regularizers.l1(2e-3), unroll=True, return_sequences=True))
-        model.add(GRU(units=128, unroll=True, kernel_regularizer=regularizers.l2(1e-3), dropout=0.2))
-        model.add(Dense(128, activation=self.activation_func))
-        model.add(Dense(128, activation=self.activation_func))
-        model.add(Dropout(0.2)) # Ray Allen
-        model.add(Dense(1, activation=self.output_activation_func))
+    def _create_gru_nn(self) -> Sequential:
+        model = Sequential([
+            Input(shape=(self.timesteps, self.input_shape)),
+            GRU(
+                units=64,
+                dropout=0.2
+            ),
+            Dense(128, activation=self.activation_func),
+            Dropout(0.2),
+
+            Dense(1, activation=self.output_activation_func)
+        ])
 
         return model
 
