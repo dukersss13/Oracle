@@ -58,7 +58,8 @@ class NeuralNet:
             Input(shape=(self.timesteps, self.input_shape)),
             GRU(
                 units=64,
-                dropout=0.2
+                dropout=0.2,
+                return_sequences=True
             ),
             Dense(128, activation=self.activation_func),
             Dropout(0.2),
