@@ -3,23 +3,53 @@ import { useEffect, useState } from "react";
 export default function GameSetup({ onDone }) {
   const [teams, setTeams] = useState([]);
   const [todayGames, setTodayGames] = useState([]);
+  const [todayGamesLoading, setTodayGamesLoading] = useState(true);
+  const [todayGamesError, setTodayGamesError] = useState("");
   const [homeTeam, setHomeTeam] = useState("");
   const [awayTeam, setAwayTeam] = useState("");
   const [dateMode, setDateMode] = useState("today");
   const [gameDate, setGameDate] = useState("");
-  const [model, setModel] = useState("XGBOOST");
+  const [model, setModel] = useState("NN");
   const [holdout, setHoldout] = useState(true);
   const [error, setError] = useState("");
 
+  const loadTodayGames = async () => {
+    setTodayGamesLoading(true);
+    setTodayGamesError("");
+    try {
+      const res = await fetch("/api/games/today");
+      if (!res.ok) {
+        setTodayGames([]);
+        setTodayGamesError("Today's matchups are temporarily unavailable.");
+        return;
+      }
+      const data = await res.json();
+      setTodayGames(Array.isArray(data) ? data : []);
+    } catch {
+      setTodayGames([]);
+      setTodayGamesError("Today's matchups are temporarily unavailable.");
+    } finally {
+      setTodayGamesLoading(false);
+    }
+  };
+
   useEffect(() => {
-    Promise.all([fetch("/api/teams"), fetch("/api/games/today")])
-      .then(async ([teamsRes, gamesRes]) => {
-        const [teamsData, gamesData] = await Promise.all([teamsRes.json(), gamesRes.json()]);
+    const loadInitialData = async () => {
+      try {
+        const teamsRes = await fetch("/api/teams");
+        if (!teamsRes.ok) {
+          throw new Error("Failed to load teams");
+        }
+        const teamsData = await teamsRes.json();
         const sortedTeams = [...teamsData].sort((a, b) => a.nickname.localeCompare(b.nickname));
         setTeams(sortedTeams);
-        setTodayGames(Array.isArray(gamesData) ? gamesData : []);
-      })
-      .catch(() => setError("Could not load teams/games."));
+      } catch {
+        setError("Could not load teams.");
+      }
+      await loadTodayGames();
+    };
+
+    loadInitialData();
   }, []);
 
   const pullRoster = async (nickname) => {
@@ -86,7 +116,7 @@ export default function GameSetup({ onDone }) {
     }
   };
 
-  const runForecastForGame = async (game) => {
+  const configureLineupForGame = async (game) => {
     setError("");
     try {
       const [homeRoster, awayRoster] = await Promise.all([pullRoster(game.home_team), pullRoster(game.away_team)]);
@@ -98,7 +128,6 @@ export default function GameSetup({ onDone }) {
         holdout,
         homeRoster,
         awayRoster,
-        autoRun: true,
       });
     } catch {
       setError("Failed to load roster from API.");
@@ -109,7 +138,16 @@ export default function GameSetup({ onDone }) {
     <form className="card" onSubmit={submit}>
       <div className="today-games-wrap">
         <small>Today's Matchups</small>
-        {todayGames.length > 0 ? (
+        {todayGamesLoading ? (
+          <p className="muted">Loading matchups...</p>
+        ) : todayGamesError ? (
+          <div>
+            <p className="error-text">{todayGamesError}</p>
+            <button type="button" className="secondary game-run-btn" onClick={loadTodayGames}>
+              Retry Matchups
+            </button>
+          </div>
+        ) : todayGames.length > 0 ? (
           <div className="today-games-grid">
             {todayGames.map((game) => (
               <div key={game.game_id} className="game-card">
@@ -127,15 +165,15 @@ export default function GameSetup({ onDone }) {
                 <button
                   type="button"
                   className="secondary game-run-btn"
-                  onClick={() => runForecastForGame(game)}
+                  onClick={() => configureLineupForGame(game)}
                 >
-                  Run Forecast
+                  Adjust Lineup
                 </button>
               </div>
             ))}
           </div>
         ) : (
-          <p className="muted">No matchups returned right now.</p>
+          <p className="muted">No games found for today.</p>
         )}
       </div>
       <div className="grid">
@@ -177,8 +215,8 @@ export default function GameSetup({ onDone }) {
         <div className="field">
           <small>Model</small>
           <select value={model} onChange={(e) => setModel(e.target.value)}>
+            <option value="NN">GRU</option>
             <option value="XGBOOST">XGBoost</option>
-            <option value="NN">Neural Network</option>
           </select>
         </div>
       </div>

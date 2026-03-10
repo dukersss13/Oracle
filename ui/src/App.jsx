@@ -11,11 +11,12 @@ export default function App() {
   const [step, setStep] = useState(STEPS.SETUP);
   const [tab, setTab] = useState("forecast");
   const [runError, setRunError] = useState("");
+  const [history, setHistory] = useState([]);
   const [state, setState] = useState({
     homeTeam: "",
     awayTeam: "",
     gameDate: "",
-    model: "XGBOOST",
+    model: "NN",
     holdout: true,
     homeRoster: [],
     awayRoster: [],
@@ -31,10 +32,6 @@ export default function App() {
     };
     const nextState = { ...state, ...cfg, lineup };
     setState(nextState);
-    if (cfg.autoRun) {
-      runForecast(nextState);
-      return;
-    }
     setStep(STEPS.LINEUP);
   };
 
@@ -73,6 +70,19 @@ export default function App() {
     const res = await fetch(`/api/forecast/${id}`);
     const data = await res.json();
     setState((prev) => ({ ...prev, forecastResult: data }));
+    setHistory((prev) => [
+      {
+        id,
+        homeTeam: state.homeTeam,
+        awayTeam: state.awayTeam,
+        gameDate: state.gameDate,
+        model: state.model,
+        status: data?.status || "completed",
+        result: data,
+        createdAt: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
     setStep(STEPS.RESULTS);
   };
 
@@ -84,6 +94,7 @@ export default function App() {
   const reset = () => {
     setRunError("");
     setState((prev) => ({ ...prev, forecastId: null, forecastResult: null }));
+    setTab("forecast");
     setStep(STEPS.SETUP);
   };
 
@@ -95,11 +106,13 @@ export default function App() {
           <h1 className="logo">Oracle Forecast</h1>
         </div>
         <div className="tab-row">
+          <button className={tab === "forecast" ? "tab active" : "tab"} onClick={() => setTab("forecast")}>Forecast</button>
           <button className={tab === "history" ? "tab active" : "tab"} onClick={() => setTab("history")}>History</button>
+          <button className="tab" onClick={reset}>Main Menu</button>
         </div>
       </header>
 
-      {tab === "history" && <History />}
+      {tab === "history" && <History items={history} />}
       {tab !== "history" && step === STEPS.SETUP && <GameSetup onDone={setupDone} />}
       {tab !== "history" && step === STEPS.LINEUP && (
         <>

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -9,6 +10,9 @@ from pyhocon import ConfigFactory
 from data_prep.locker_room import LockerRoom, Team
 from models.neural_networks import NeuralNet
 from models.ml_models import XGBoost
+
+
+logger = logging.getLogger(__name__)
 
 
 class Oracle:
@@ -25,6 +29,12 @@ class Oracle:
         self.force_refresh_cache = force_refresh_cache
         self._setup_config_files(game_details, oracle_config, model_config)
         self.setup_oracle()
+        logger.info(
+            "Oracle initialized (model=%s, holdout=%s, non_interactive=%s)",
+            self.oracle_config["model"],
+            self.oracle_config["holdout"],
+            self.non_interactive,
+        )
 
     def _setup_config_files(self, game_details: dict | None, oracle_config: dict | None,
                             model_config_override: dict | None):
@@ -84,6 +94,7 @@ class Oracle:
             self.points_predictor = None
         else:
             raise NotImplementedError(f"{self.points_predictor} is not implemented - select a different model!")
+        logger.info("Oracle setup complete (model=%s, save_output=%s)", model, self.save_output)
 
     def _init_predictors(self):
         fga_predictor = Oracle.init_attempts_predictor(input_shape=1)
@@ -95,6 +106,12 @@ class Oracle:
         if model == "XGBOOST":
             return XGBoost(self.model_config), fga_predictor, fg3a_predictor
         raise NotImplementedError(f"{model} is not implemented - select a different model!")
+
+    def _timesteps(self) -> int:
+        return int(self.model_config.get("timesteps", 4))
+
+    def _model_type(self) -> str:
+        return str(self.model_config.get("type", self.oracle_config.get("model", "NN"))).upper()
 
     def prepare_training_data(self, player_game_logs: np.ndarray) -> tuple:
         """
@@ -131,7 +148,7 @@ class Oracle:
         :param team: home or away
         :return: x_test & y_test (if applicable)
         """
-        timesteps: int = self.model_config["timesteps"]
+        timesteps: int = self._timesteps()
         home_or_away = np.array([1., 0.]) if team == Team.HOME else np.array([0., 1.])
         rest_days = (pd.Timestamp(self.game_date) - most_recent_game_date).days
 
@@ -197,17 +214,18 @@ class Oracle:
         :param players_full_name: full name of player
         :param filtered_players_logs: players' game logs
         """
-        empty_logs = filtered_players_logs.empty
-        doesnt_play = filtered_players_logs["MIN"].values[:self.model_config["timesteps"]].mean() < 10.0
+        empty_logs = filtered_players_logs.empty or "MIN" not in filtered_players_logs.columns
+        timesteps = self._timesteps()
+        if empty_logs:
+            logger.warning("No game logs found for %s; returning 0 points", players_full_name)
+            return 0
+
+        doesnt_play = filtered_players_logs["MIN"].values[:timesteps].mean() < 10.0
         game_plan = self.locker_room.home_game_plan if team == Team.HOME else self.locker_room.away_game_plan
         todays_mins = game_plan.players_mins[players_full_name]
 
-        if empty_logs:
-            print(f"WARNING: no game logs found for {players_full_name}. Returning 0 points.")
-            return 0
-
-        if self.model_config["type"] == "GRU":
-            min_games = self.model_config["timesteps"] * 8
+        if self._model_type() == "GRU":
+            min_games = timesteps * 8
         else:
             min_games = 20
 
@@ -215,8 +233,11 @@ class Oracle:
             return 0
 
         elif filtered_players_logs.shape[0] < min_games:
-            print(f"WARNING: {players_full_name} has only played {filtered_players_logs.shape[0]} games.")
-            print(f"WARNING: Cannot run forecast for {players_full_name}. Will use player's average as forecast")
+            logger.warning(
+                "%s has only played %s games; using average points as fallback",
+                players_full_name,
+                filtered_players_logs.shape[0],
+            )
             return int(filtered_players_logs.iloc[:, -1].mean())
 
         most_recent_game_date = self.locker_room.get_most_recent_game_date(filtered_players_logs)
@@ -250,14 +271,14 @@ class Oracle:
         total_players = len(data.active_players)
         workers = int(os.environ.get("ORACLE_PARALLEL_WORKERS", "2"))
 
-        print(f"\nStarting forecast for the {data.team_name}")
+        logger.info("Starting team forecast (team=%s, players=%s, workers=%s)", data.team_name, total_players, workers)
 
         player_rows = list(data.active_players.iterrows())
         if workers <= 1 or len(player_rows) <= 1:
             for idx, (players_name, players_id) in enumerate(player_rows, start=1):
                 _, forecasted_points, actual_points = self._run_player_forecast(team, players_name, players_id)
                 forecast_dict = Oracle.append_to_forecast_dict(forecast_dict, players_name, forecasted_points, actual_points)
-                print(f"\n{idx}/{total_players} players done for the {data.team_name}")
+                logger.info("Team %s progress: %s/%s", data.team_name, idx, total_players)
         else:
             future_map = {}
             with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -271,7 +292,7 @@ class Oracle:
                     players_name, forecasted_points, actual_points = future.result()
                     results[players_name] = (forecasted_points, actual_points)
                     finished += 1
-                    print(f"\n{finished}/{total_players} players done for the {data.team_name}")
+                    logger.info("Team %s progress: %s/%s", data.team_name, finished, total_players)
 
             for players_name, _ in player_rows:
                 forecasted_points, actual_points = results[players_name]
@@ -282,11 +303,11 @@ class Oracle:
         return forecast_df
 
     def _run_player_forecast(self, team: Team, players_name: str, players_id):
-        print(f"\nFetching game logs for: {players_name}")
+        logger.info("Fetching game logs for player=%s", players_name)
         filtered_players_logs, actual_points = self.locker_room.get_filtered_players_logs(players_id)
 
         points_predictor, fga_predictor, fg3a_predictor = self._init_predictors()
-        print(f"Starting forecast for: {players_name}")
+        logger.info("Starting forecast for player=%s", players_name)
         forecasted_points = self.get_players_forecast(
             players_name,
             filtered_players_logs,
@@ -295,7 +316,7 @@ class Oracle:
             fga_predictor,
             fg3a_predictor,
         )
-        print(f"Forecasted points: {forecasted_points}")
+        logger.info("Forecast completed for player=%s points=%s", players_name, forecasted_points)
         if self.progress_callback:
             self.progress_callback({"type": "player_complete", "player": players_name})
         return players_name, forecasted_points, actual_points
@@ -315,7 +336,7 @@ class Oracle:
         if players_mins_data[players_full_name] is not None:
             mins = players_mins_data[players_full_name]
         else:
-            mins = players_game_log["MIN"].values[:self.model_config["timesteps"]].mean()
+            mins = players_game_log["MIN"].values[:self._timesteps()].mean()
         
         return np.array([(round(mins))])
 
@@ -360,15 +381,15 @@ class Oracle:
         output_path = os.path.join(self.output_path, output_folder_name)
 
         if not os.path.exists(output_path):
-            print(f"Making {output_path} output path")
+            logger.info("Creating output directory: %s", output_path)
             os.mkdir(output_path)
         
-        print(f"Saving forecasts under {output_path}")
+        logger.info("Saving forecasts under %s", output_path)
         with pd.ExcelWriter(f"{output_path}/Forecast.xlsx") as writer:
             home_team_forecast_df.to_excel(writer, sheet_name=f"{self.locker_room.home_team} Forecast", index=False)
             away_team_forecast_df.to_excel(writer, sheet_name=f"{self.locker_room.away_team} Forecast", index=False)
         
-        print("Saving config files")
+        logger.info("Saving model/oracle config snapshots")
         with open(f"{output_path}/oracle_config.json", "w") as json_file:
             json.dump(self.oracle_config, json_file, indent=2)
 
@@ -379,15 +400,18 @@ class Oracle:
         """
         Run Oracle
         """
-        print("Running Oracle")
+        logger.info("Running Oracle forecast pipeline")
         home_team_forecast_df = self.get_team_forecast(Team.HOME)
         away_team_forecast_df = self.get_team_forecast(Team.AWAY)
-        
-        print(home_team_forecast_df)
-        print(away_team_forecast_df)
+
+        logger.info(
+            "Team forecasts completed (home_total=%s, away_total=%s)",
+            home_team_forecast_df["FORECASTED_POINTS"].iloc[-1],
+            away_team_forecast_df["FORECASTED_POINTS"].iloc[-1],
+        )
 
         if self.save_output:
-            print("Saving output files")
+            logger.info("Persisting forecast output files")
             self.save_forecasts(home_team_forecast_df, away_team_forecast_df)
 
         return home_team_forecast_df, away_team_forecast_df

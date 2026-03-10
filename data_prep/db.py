@@ -1,10 +1,14 @@
 import json
+import logging
 import sqlite3
 import time
 from io import StringIO
 from pathlib import Path
 
 import pandas as pd
+
+
+logger = logging.getLogger(__name__)
 
 
 class OracleCacheDB:
@@ -15,6 +19,7 @@ class OracleCacheDB:
             db_path = Path.cwd() / "artifacts" / "cache" / "oracle_cache.db"
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.debug("Initializing OracleCacheDB at %s", self.db_path)
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
@@ -80,9 +85,11 @@ class OracleCacheDB:
                 (int(team_id), season),
             ).fetchone()
         if not row:
+            logger.debug("Roster cache miss (team_id=%s, season=%s)", team_id, season)
             return None
         updated_at, payload_json = row
         if not self._is_fresh(updated_at, ttl_hours):
+            logger.debug("Roster cache stale (team_id=%s, season=%s)", team_id, season)
             return None
         return self._json_to_df(payload_json)
 
@@ -108,9 +115,11 @@ class OracleCacheDB:
                 (int(player_id), season),
             ).fetchone()
         if not row:
+            logger.debug("Player logs cache miss (player_id=%s, season=%s)", player_id, season)
             return None
         updated_at, payload_json = row
         if not self._is_fresh(updated_at, ttl_hours):
+            logger.debug("Player logs cache stale (player_id=%s, season=%s)", player_id, season)
             return None
         return self._json_to_df(payload_json)
 
@@ -136,9 +145,11 @@ class OracleCacheDB:
                 (dataset_key,),
             ).fetchone()
         if not row:
+            logger.debug("Dataset cache miss (dataset_key=%s)", dataset_key)
             return None
         updated_at, payload_json = row
         if not self._is_fresh(updated_at, ttl_hours):
+            logger.debug("Dataset cache stale (dataset_key=%s)", dataset_key)
             return None
         return self._json_to_df(payload_json)
 

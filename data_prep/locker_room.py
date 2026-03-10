@@ -1,5 +1,6 @@
 import os
 import time
+import logging
 
 import json
 import pandas as pd
@@ -13,6 +14,9 @@ from data_prep.injury_report import injury_report
 from data_prep.db import OracleCacheDB
 from nba_api.stats.endpoints import playergamelog, commonteamroster
 from nba_api.stats.static import  players
+
+
+logger = logging.getLogger(__name__)
 
 pd.set_option('mode.chained_assignment', None)
 pd.set_option('display.max_columns', None)
@@ -71,6 +75,13 @@ class LockerRoom:
         self.cache_strategy = cache_strategy.lower()
         self.cache_ttl_hours = int(cache_ttl_hours)
         self.db_cache = OracleCacheDB()
+        logger.info(
+            "LockerRoom initialized (home=%s, away=%s, holdout=%s, cache_strategy=%s)",
+            self.home_team,
+            self.away_team,
+            self.holdout,
+            self.cache_strategy,
+        )
 
         self._fetch_teams_data(fetch_new_data)
 
@@ -122,6 +133,7 @@ class LockerRoom:
         dataset_key = f"all_logs_{'_'.join(collected_seasons)}"
 
         if fetch_new_data:
+            logger.info("Refreshing all_logs dataset from NBA APIs")
             update_data(current_season)
             consolidate_all_game_logs(collected_seasons, current_season)
             csv_logs = pd.read_csv("data/all_logs.csv", low_memory=False)
@@ -132,6 +144,7 @@ class LockerRoom:
 
         db_logs = self.db_cache.get_dataset_df(dataset_key, ttl_hours=None)
         if db_logs is not None and not db_logs.empty:
+            logger.info("Loaded all_logs dataset from cache (rows=%s)", len(db_logs))
             self.all_logs = db_logs
             return
 
@@ -140,6 +153,7 @@ class LockerRoom:
         csv_logs = csv_logs[csv_logs["SEASON_YEAR"].isin(collected_seasons)]
         self.db_cache.upsert_dataset_df(dataset_key, csv_logs)
         self.all_logs = csv_logs
+        logger.info("Bootstrapped all_logs dataset from disk (rows=%s)", len(csv_logs))
 
     @staticmethod
     def _pause_for_configurations() -> int:
@@ -208,17 +222,24 @@ class LockerRoom:
                         f"WARNING: roster fetch failed for team_id={team_id} "
                         f"(attempt {attempt}/{retries}); retrying..."
                     )
+                    logger.warning(
+                        "Roster fetch failed for team_id=%s (attempt %s/%s); retrying",
+                        team_id,
+                        attempt,
+                        retries,
+                    )
                     time.sleep(backoff_seconds * attempt)
 
         # If live fetch fails, fall back to stale DB cache when available.
         stale_db_roster = self.db_cache.get_roster(team_id, season, ttl_hours=None)
         if stale_db_roster is not None and not stale_db_roster.empty:
-            print(f"WARNING: using cached DB roster for team_id={team_id} after API failures.")
+            logger.warning("Using stale cached roster for team_id=%s after API failures", team_id)
             return stale_db_roster
 
-        print(
-            f"WARNING: unable to fetch roster for team_id={team_id} after {retries} attempts. "
-            "Proceeding with an empty roster."
+        logger.warning(
+            "Unable to fetch roster for team_id=%s after %s attempts; returning empty roster",
+            team_id,
+            retries,
         )
         return pd.DataFrame(columns=["PLAYER", "PLAYER_ID"])
 
@@ -347,9 +368,10 @@ class LockerRoom:
             return merged_df
         except Exception:
             if not cached_df.empty:
-                print(
-                    f"WARNING: using cached game logs for player_id={normalized_player_id} "
-                    f"season={season} after API failure."
+                logger.warning(
+                    "Using cached game logs for player_id=%s season=%s after API failure",
+                    normalized_player_id,
+                    season,
                 )
                 return cached_df
             raise
@@ -421,7 +443,11 @@ class LockerRoom:
                 if not players_game_logs_df.empty:
                     all_logs.append(players_game_logs_df)
             except Exception:
-                print(f"Logs for playerID: {self._normalize_player_id(players_id)} for {season} cannot be fetched.")
+                logger.exception(
+                    "Player logs could not be fetched (player_id=%s, season=%s)",
+                    self._normalize_player_id(players_id),
+                    season,
+                )
 
         if not all_logs:
             return pd.DataFrame(), 0
@@ -450,10 +476,23 @@ class LockerRoom:
                 "E_PACE", "E_DEF_RATING"]
         opponent_name = self.home_away_dict[Team.AWAY if team == Team.HOME else Team.HOME]
         opponent_id = self.fetch_teams_id(("nickname", opponent_name))
-        opponent_defensive_stats = self.all_logs[(self.all_logs["SEASON_YEAR"]==current_season[0]) & \
-                                                 (self.all_logs["TEAM_ID"]==opponent_id)][cols].iloc[0, :]
+        season_team_slice = self.all_logs[
+            (self.all_logs["SEASON_YEAR"] == current_season[0]) &
+            (self.all_logs["TEAM_ID"] == opponent_id)
+        ]
 
-        return opponent_defensive_stats
+        if season_team_slice.empty:
+            season_team_slice = self.all_logs[self.all_logs["TEAM_ID"] == opponent_id]
+
+        if not season_team_slice.empty:
+            return season_team_slice[cols].iloc[0, :]
+
+        # Final fallback: return dataset-level means to keep forecasts running.
+        if self.all_logs.empty:
+            logger.warning("all_logs dataset is empty; using zero-vector defensive fallback")
+            return pd.Series(np.zeros(len(cols)), index=cols)
+
+        return self.all_logs[cols].mean(numeric_only=True).reindex(cols, fill_value=0.0)
 
     @staticmethod
     def prepare_training_data(players_game_log: pd.DataFrame, input_cols: list[str],
@@ -486,8 +525,10 @@ class LockerRoom:
         :param players_game_logs_df: player's game logs df
         :return: player's game logs df w/ rest days
         """
-        players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(lambda x: x.split(" "))
         players_game_logs_df["GAME_DATE"] = players_game_logs_df["GAME_DATE"].apply(LockerRoom.convert_to_timestamp)
+
+        # Drop rows with unparseable dates instead of failing the whole forecast run.
+        players_game_logs_df = players_game_logs_df.dropna(subset=["GAME_DATE"])
 
         players_game_logs_df = players_game_logs_df[players_game_logs_df["GAME_DATE"] <= self.game_date]
         players_game_logs_df["REST_DAYS"] = players_game_logs_df["GAME_DATE"].diff(periods=-1)
@@ -538,10 +579,14 @@ class LockerRoom:
         """
         Convert a date in string format to pd.Timestamp format
         """
-        months_dict = LockerRoom._init_months_dict()
-        date = pd.Timestamp(f"{date_string[2]}-{months_dict[date_string[0]]}-{date_string[1][:-1]}")
+        # nba_api date values may be strings ("Apr 3, 2024") or tokenized lists.
+        if isinstance(date_string, list):
+            raw_date = " ".join(str(token) for token in date_string)
+        else:
+            raw_date = str(date_string)
 
-        return date
+        parsed = pd.to_datetime(raw_date, errors="coerce")
+        return pd.Timestamp(parsed) if not pd.isna(parsed) else pd.NaT
 
     def get_opp_id(self, matchup: str):
         """
@@ -579,7 +624,7 @@ class LockerRoom:
         try:
             players_id = players.find_players_by_full_name(players_full_name)[0]["id"]
         except IndexError:
-            print(f"WARNING: {players_full_name} does not have a player ID!")
+            logger.warning("Player does not have an NBA API player ID: %s", players_full_name)
             players_id = None
         
         return players_id
@@ -594,8 +639,8 @@ class LockerRoom:
         try:
             name_type, name = lookup_values
             teams_id = self.nba_teams_info[self.nba_teams_info[name_type]==name]["id"]
-        except:
-            print(f"WARNING: {lookup_values}'s ID cannot be found!")
+        except Exception:
+            logger.exception("Team lookup failed for values=%s", lookup_values)
             teams_id = None
         
         return teams_id.values[0]

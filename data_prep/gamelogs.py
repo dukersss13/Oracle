@@ -1,8 +1,12 @@
 import os
+import logging
 import pandas as pd
 
 from nba_api.stats.endpoints import teamgamelogs, leaguedashptteamdefend, teamestimatedmetrics
 from data_prep.db import OracleCacheDB
+
+
+logger = logging.getLogger(__name__)
 
 
 def _load_nba_teams_info() -> pd.DataFrame:
@@ -10,10 +14,12 @@ def _load_nba_teams_info() -> pd.DataFrame:
     dataset_key = "static_team_info"
     cached_df = db_cache.get_dataset_df(dataset_key, ttl_hours=None)
     if cached_df is not None and not cached_df.empty:
+        logger.info("Loaded static team info from cache")
         return cached_df
 
     csv_df = pd.read_csv("data/static_data/static_team_info.csv", index_col=0)
     db_cache.upsert_dataset_df(dataset_key, csv_df)
+    logger.info("Loaded static team info from CSV and cached it")
     return csv_df
 
 
@@ -68,7 +74,7 @@ def save_teams_logs_per_season(seasons: list):
 
     :param seasons: list of season(s) of the games to save
     """
-    print(f"Fetching new game logs for {seasons}")
+    logger.info("Fetching new game logs for seasons=%s", seasons)
     for season in seasons:
         path = f"data/seasonal_data/20{season[-2:]}/team_logs"
         for team_id in nba_teams_info["id"]:
@@ -139,7 +145,7 @@ def merge_defensive_stats_to_game_logs(seasons: list):
 
     :param seasons: _description_
     """
-    print("Merging defensive data to game logs")
+    logger.info("Merging defensive data into team game logs")
     for season in seasons:
         dir = f"data/seasonal_data/20{season[-2:]}"
         for team_abb in nba_teams_info["abbreviation"]:
@@ -170,7 +176,7 @@ def consolidate_all_game_logs(seasons: list, season_to_update: list[str]):
     Consolidate all the logs into 1
     across ALL collected seasons
     """
-    print(f"Adding new game logs from {seasons} to all_logs.csv")
+    logger.info("Consolidating game logs into data/all_logs.csv for seasons=%s", seasons)
     season_all_logs = []
     for season in season_to_update:
         season_team_logs = []

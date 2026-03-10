@@ -26,6 +26,7 @@ from api.schemas import (
 from data_prep.db import OracleCacheDB
 from data_prep.gamelogs import nba_teams_info
 from models.oracle import Oracle
+from scripts.preload_training_cache import preload_all_logs_dataset, preload_rosters_and_player_logs
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +41,33 @@ app.add_middleware(
 
 _forecasts: dict[str, dict] = {}
 _db_cache = OracleCacheDB()
+_refresh_job: dict[str, object] = {
+    "status": "idle",
+    "started_at": None,
+    "finished_at": None,
+    "error": None,
+}
+
+
+def _run_data_refresh_job() -> None:
+    _refresh_job["status"] = "running"
+    _refresh_job["started_at"] = pd.Timestamp.now().isoformat()
+    _refresh_job["finished_at"] = None
+    _refresh_job["error"] = None
+    logger.info("Started data refresh job")
+
+    try:
+        db = OracleCacheDB()
+        preload_all_logs_dataset(db)
+        preload_rosters_and_player_logs(db)
+        _refresh_job["status"] = "completed"
+        logger.info("Data refresh job completed")
+    except Exception as exc:
+        logger.exception("Data refresh job failed")
+        _refresh_job["status"] = "error"
+        _refresh_job["error"] = str(exc)
+    finally:
+        _refresh_job["finished_at"] = pd.Timestamp.now().isoformat()
 
 
 @app.get("/api/teams", response_model=list[TeamInfo])
@@ -111,14 +139,28 @@ def get_roster(nickname: str):
 @app.get("/api/games/today", response_model=list[TodayGameOption])
 def get_todays_games():
     timeout = int(os.environ.get("ORACLE_NBA_API_TIMEOUT", "20"))
-    today = pd.Timestamp.now().strftime("%m/%d/%Y")
-    try:
-        board = scoreboardv2.ScoreboardV2(game_date=today, timeout=timeout)
-        header_df = board.game_header.get_data_frame()
-    except Exception:
-        return []
+    today_ts = pd.Timestamp.now().normalize()
+    date_candidates = [today_ts, today_ts - pd.Timedelta(days=1), today_ts + pd.Timedelta(days=1)]
+
+    header_df = pd.DataFrame()
+    any_fetch_succeeded = False
+    for candidate in date_candidates:
+        game_date = candidate.strftime("%m/%d/%Y")
+        try:
+            board = scoreboardv2.ScoreboardV2(game_date=game_date, timeout=timeout)
+            candidate_df = board.game_header.get_data_frame()
+            any_fetch_succeeded = True
+            if not candidate_df.empty:
+                logger.info("Loaded today's matchups from scoreboard date=%s", game_date)
+                header_df = candidate_df
+                break
+        except Exception:
+            logger.warning("Scoreboard fetch failed for date=%s", game_date, exc_info=True)
 
     if header_df.empty:
+        if not any_fetch_succeeded:
+            raise HTTPException(503, "Matchups temporarily unavailable")
+        logger.info("No games found across date candidates around today")
         return []
 
     team_id_to_nickname = {
@@ -151,6 +193,20 @@ def get_todays_games():
         )
 
     return sorted(options, key=lambda g: g.label)
+
+
+@app.post("/api/data/refresh")
+def start_data_refresh():
+    if _refresh_job["status"] == "running":
+        raise HTTPException(409, "Data refresh already in progress")
+
+    Thread(target=_run_data_refresh_job, daemon=True).start()
+    return {"status": "started"}
+
+
+@app.get("/api/data/refresh")
+def get_data_refresh_status():
+    return _refresh_job
 
 
 def _default_features() -> list[str]:

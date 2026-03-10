@@ -1,56 +1,64 @@
+import logging
+import os
+from datetime import datetime
+
 import requests
 import pandas as pd
-from datetime import datetime
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 url = "https://www.basketball-reference.com/friv/injuries.cgi"
 
-# Fetch the HTML content of the webpage
-response = requests.get(url)
 
-injury_report = {"name": [], "team": [], "date": [], "injury_description": []}
-# Check if the request was successful (status code 200)
-if response.status_code == 200:
-    # Parse the HTML content using BeautifulSoup
+def _fetch_injury_report_dict() -> dict[str, list[str]]:
+    injury_data = {"name": [], "team": [], "date": [], "injury_description": []}
+    if os.environ.get("ORACLE_DISABLE_INJURY_REPORT", "0") == "1":
+        logger.info("Injury report fetch disabled via ORACLE_DISABLE_INJURY_REPORT=1")
+        return injury_data
+
+    timeout_seconds = int(os.environ.get("ORACLE_INJURY_TIMEOUT", "15"))
+
+    try:
+        response = requests.get(url, timeout=timeout_seconds)
+    except requests.RequestException:
+        logger.warning("Failed to fetch injury report from %s", url, exc_info=True)
+        return injury_data
+
+    if response.status_code != 200:
+        logger.warning("Injury report request returned status=%s", response.status_code)
+        return injury_data
+
     soup = BeautifulSoup(response.content, "html.parser")
-    # Find the table containing the injury data
     injury_table = soup.find("table", {"id": "injuries"})
+    if not injury_table:
+        logger.warning("Injury report table not found in response")
+        return injury_data
 
-    if injury_table:
-        # Extract rows from the table
-        rows = injury_table.find_all("tr")
-        # Skip the header row (contains column names)
-        header_row = rows[0]
-        rows = rows[1:]
-        # Iterate through rows and extract data
-        for row in rows:
-            # Extract data from each column in the row
-            columns = row.find_all("td")
-            player_name = row.find("th").text.strip()
-            team = columns[0].text.strip()
-            date = columns[1].text.strip()
-            injury_description = columns[2].text.strip()
-            injury_report["name"].append(player_name)
-            injury_report["team"].append(team)
-            injury_report["date"].append(date)
-            injury_report["injury_description"].append(injury_description)
-    else:
-        print("Injury table not found.")
-else:
-    print("Failed to fetch data. Status code:", response.status_code)
+    rows = injury_table.find_all("tr")
+    for row in rows[1:]:
+        columns = row.find_all("td")
+        if len(columns) < 3:
+            continue
+        player_header = row.find("th")
+        if player_header is None:
+            continue
 
+        injury_data["name"].append(player_header.text.strip())
+        injury_data["team"].append(columns[0].text.strip())
+        injury_data["date"].append(columns[1].text.strip())
+        injury_data["injury_description"].append(columns[2].text.strip())
+
+    logger.info("Fetched injury report entries=%s", len(injury_data["name"]))
+    return injury_data
 
 def adjust_datetime_format(date_string: str) -> str:
-    # Original date string
-    date_string = 'Sat, Feb 3, 2024'
-
-    # Parse the date string into a datetime object
-    date_object = datetime.strptime(date_string, '%a, %b %d, %Y')
-
-    # Format the datetime object into MM-DD-YYYY format
-    formatted_date = date_object.strftime('%m-%d-%Y')
-
-    return formatted_date
+    try:
+        date_object = datetime.strptime(date_string, "%a, %b %d, %Y")
+        return date_object.strftime("%m-%d-%Y")
+    except Exception:
+        logger.debug("Unable to parse injury date: %s", date_string)
+        return date_string
 
 def get_injury_status(injury_report: pd.DataFrame) -> pd.DataFrame:
     """
@@ -61,6 +69,8 @@ def get_injury_status(injury_report: pd.DataFrame) -> pd.DataFrame:
 
     return injury_report
 
+injury_report = _fetch_injury_report_dict()
 injury_report = pd.DataFrame(injury_report)
-injury_report["date"] = injury_report["date"].apply(adjust_datetime_format)
+if not injury_report.empty and "date" in injury_report.columns:
+    injury_report["date"] = injury_report["date"].apply(adjust_datetime_format)
 injury_report = get_injury_status(injury_report)
