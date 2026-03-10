@@ -1,6 +1,7 @@
 import json
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import pandas as pd
 from pyhocon import ConfigFactory
@@ -11,34 +12,56 @@ from models.ml_models import XGBoost
 
 
 class Oracle:
-    def __init__(self):
+    def __init__(self, game_details: dict | None = None, oracle_config: dict | None = None,
+                 model_config: dict | None = None, active_players_dict: dict | None = None,
+                 progress_callback=None, non_interactive: bool = False,
+                 force_refresh_cache: bool = False):
         """
         Initialize the Oracle
         """
-        self._setup_config_files()
+        self.progress_callback = progress_callback
+        self.active_players_dict = active_players_dict
+        self.non_interactive = non_interactive
+        self.force_refresh_cache = force_refresh_cache
+        self._setup_config_files(game_details, oracle_config, model_config)
         self.setup_oracle()
 
-    def _setup_config_files(self):
+    def _setup_config_files(self, game_details: dict | None, oracle_config: dict | None,
+                            model_config_override: dict | None):
         """
         Set up config files
         """
-        oracle_conf = ConfigFactory.parse_file("oracle.conf")
-        game_details = oracle_conf["game_details"]
-        self.game_date: str = game_details["game_date"]
-        self.oracle_config = oracle_conf["oracle_config"]
+        if game_details is not None and oracle_config is not None:
+            self.game_date = game_details["game_date"]
+            self.oracle_config = oracle_config
+        else:
+            oracle_conf = ConfigFactory.parse_file("oracle.conf")
+            game_details = oracle_conf["game_details"]
+            self.game_date = game_details["game_date"]
+            self.oracle_config = oracle_conf["oracle_config"]
 
         model_config = ConfigFactory.parse_file("model.conf")
-
         model_chosen = self.oracle_config["model"].upper()
-        if model_chosen == "NN":
+        if model_config_override is not None:
+            self.model_config = model_config_override
+        elif model_chosen == "NN":
             self.model_config = model_config["nn_config"]
         elif model_chosen == "XGBOOST":
             self.model_config = model_config["xgboost_config"]
         else:
             raise ValueError(f"{model_chosen} is not a valid selection")
 
-        self.locker_room = LockerRoom(game_details, self.oracle_config["features"],
-                                      self.oracle_config["fetch_new_data"], self.oracle_config["holdout"])
+        self.locker_room = LockerRoom(
+            game_details,
+            self.oracle_config["features"],
+            self.oracle_config["fetch_new_data"],
+            self.oracle_config["holdout"],
+            active_players_override=self.active_players_dict,
+            interactive=not self.non_interactive,
+            force_refresh_cache=self.force_refresh_cache,
+            cache_strategy=self.oracle_config.get("cache_strategy", os.environ.get("ORACLE_CACHE_STRATEGY", "incremental")),
+            cache_ttl_hours=int(self.oracle_config.get("cache_ttl_hours", os.environ.get("ORACLE_CACHE_TTL_HOURS", "12"))),
+        )
 
     def setup_oracle(self):
         """
@@ -54,13 +77,24 @@ class Oracle:
         model = self.oracle_config["model"].upper()
 
         if model == "NN":
-            self.points_predictor = NeuralNet(self.model_config)
-            self.fga_predictor = Oracle.init_attempts_predictor(input_shape=1)
-            self.fg3a_predictor = Oracle.init_attempts_predictor(input_shape=2)
+            self.points_predictor = None
+            self.fga_predictor = None
+            self.fg3a_predictor = None
         elif model == "XGBOOST":
-            self.points_predictor = XGBoost(self.model_config)
+            self.points_predictor = None
         else:
             raise NotImplementedError(f"{self.points_predictor} is not implemented - select a different model!")
+
+    def _init_predictors(self):
+        fga_predictor = Oracle.init_attempts_predictor(input_shape=1)
+        fg3a_predictor = Oracle.init_attempts_predictor(input_shape=2)
+        model = self.oracle_config["model"].upper()
+        if model == "NN":
+            points_predictor = NeuralNet(self.model_config)
+            return points_predictor, fga_predictor, fg3a_predictor
+        if model == "XGBOOST":
+            return XGBoost(self.model_config), fga_predictor, fg3a_predictor
+        raise NotImplementedError(f"{model} is not implemented - select a different model!")
 
     def prepare_training_data(self, player_game_logs: np.ndarray) -> tuple:
         """
@@ -87,7 +121,8 @@ class Oracle:
         return NeuralNet(attempts_predictor_config)
 
     def prepare_testing_data(self, players_full_name: str, player_game_logs: pd.DataFrame,
-                             most_recent_game_date: pd.Timestamp, team: Team) -> np.ndarray:
+                             most_recent_game_date: pd.Timestamp, team: Team,
+                             fga_predictor, fg3a_predictor) -> np.ndarray:
         """
         Get the input parameters for the test set
 
@@ -108,7 +143,7 @@ class Oracle:
 
         # Use mins to forecast fga
         
-        fga = round(self.fga_predictor.get_forecast(data_for_fga_pred, testing_mins))
+        fga = round(fga_predictor.get_forecast(data_for_fga_pred, testing_mins))
         
         # Use defensive stats to forecast fg3a & fta
         if player_game_logs["FG3A_player"].mean() <= 5:
@@ -116,7 +151,7 @@ class Oracle:
         else:
             data_for_fg3a_pred = self.locker_room.prepare_training_data(player_game_logs,
                                                                         ["MIN", "FGA"], "FG3A_player")
-            fg3a = self.fg3a_predictor.get_forecast(data_for_fg3a_pred,
+            fg3a = fg3a_predictor.get_forecast(data_for_fg3a_pred,
                                                np.concatenate([testing_mins, [fga]]))
 
         fta = round(player_game_logs["FTA"].values[:timesteps].mean())
@@ -154,7 +189,8 @@ class Oracle:
         
         return pct
 
-    def get_players_forecast(self, players_full_name: str, filtered_players_logs: pd.DataFrame, team: Team) -> int:
+    def get_players_forecast(self, players_full_name: str, filtered_players_logs: pd.DataFrame, team: Team,
+                             points_predictor, fga_predictor, fg3a_predictor) -> int:
         """
         Get players' forecast
 
@@ -165,6 +201,10 @@ class Oracle:
         doesnt_play = filtered_players_logs["MIN"].values[:self.model_config["timesteps"]].mean() < 10.0
         game_plan = self.locker_room.home_game_plan if team == Team.HOME else self.locker_room.away_game_plan
         todays_mins = game_plan.players_mins[players_full_name]
+
+        if empty_logs:
+            print(f"WARNING: no game logs found for {players_full_name}. Returning 0 points.")
+            return 0
 
         if self.model_config["type"] == "GRU":
             min_games = self.model_config["timesteps"] * 8
@@ -181,9 +221,16 @@ class Oracle:
 
         most_recent_game_date = self.locker_room.get_most_recent_game_date(filtered_players_logs)
         training_data = self.prepare_training_data(filtered_players_logs)
-        x_test = self.prepare_testing_data(players_full_name, filtered_players_logs, most_recent_game_date, team)
+        x_test = self.prepare_testing_data(
+            players_full_name,
+            filtered_players_logs,
+            most_recent_game_date,
+            team,
+            fga_predictor,
+            fg3a_predictor,
+        )
 
-        forecasted_points = self.points_predictor.get_forecast(training_data, x_test)
+        forecasted_points = points_predictor.get_forecast(training_data, x_test)
 
         return forecasted_points
 
@@ -201,25 +248,57 @@ class Oracle:
 
         forecast_dict = dict(zip(["PLAYER_NAME", "FORECASTED_POINTS", "ACTUAL_POINTS"], [[] for _ in range(3)]))
         total_players = len(data.active_players)
-        players_done = 0
+        workers = int(os.environ.get("ORACLE_PARALLEL_WORKERS", "2"))
 
         print(f"\nStarting forecast for the {data.team_name}")
 
-        for players_name, players_id in data.active_players.iterrows():
-            print(f"\nFetching game logs for: {players_name}")
-            filtered_players_logs, actual_points = self.locker_room.get_filtered_players_logs(players_id)
-            
-            print(f"Starting forecast for: {players_name}")
-            forecasted_points = self.get_players_forecast(players_name, filtered_players_logs, team)
-            print(f"Forecasted points: {forecasted_points}")
-            forecast_dict = Oracle.append_to_forecast_dict(forecast_dict, players_name, forecasted_points, actual_points)
-            players_done += 1
+        player_rows = list(data.active_players.iterrows())
+        if workers <= 1 or len(player_rows) <= 1:
+            for idx, (players_name, players_id) in enumerate(player_rows, start=1):
+                _, forecasted_points, actual_points = self._run_player_forecast(team, players_name, players_id)
+                forecast_dict = Oracle.append_to_forecast_dict(forecast_dict, players_name, forecasted_points, actual_points)
+                print(f"\n{idx}/{total_players} players done for the {data.team_name}")
+        else:
+            future_map = {}
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                for players_name, players_id in player_rows:
+                    future = executor.submit(self._run_player_forecast, team, players_name, players_id)
+                    future_map[future] = players_name
 
-            print(f"\n{players_done}/{total_players} players done for the {data.team_name}")    
+                finished = 0
+                results = {}
+                for future in as_completed(future_map):
+                    players_name, forecasted_points, actual_points = future.result()
+                    results[players_name] = (forecasted_points, actual_points)
+                    finished += 1
+                    print(f"\n{finished}/{total_players} players done for the {data.team_name}")
+
+            for players_name, _ in player_rows:
+                forecasted_points, actual_points = results[players_name]
+                forecast_dict = Oracle.append_to_forecast_dict(forecast_dict, players_name, forecasted_points, actual_points)
 
         forecast_df = self.form_forecast_df(forecast_dict)
 
         return forecast_df
+
+    def _run_player_forecast(self, team: Team, players_name: str, players_id):
+        print(f"\nFetching game logs for: {players_name}")
+        filtered_players_logs, actual_points = self.locker_room.get_filtered_players_logs(players_id)
+
+        points_predictor, fga_predictor, fg3a_predictor = self._init_predictors()
+        print(f"Starting forecast for: {players_name}")
+        forecasted_points = self.get_players_forecast(
+            players_name,
+            filtered_players_logs,
+            team,
+            points_predictor,
+            fga_predictor,
+            fg3a_predictor,
+        )
+        print(f"Forecasted points: {forecasted_points}")
+        if self.progress_callback:
+            self.progress_callback({"type": "player_complete", "player": players_name})
+        return players_name, forecasted_points, actual_points
 
     def get_player_mins(self, players_full_name: str,
                         players_game_log: pd.DataFrame, team: Team) -> np.float32:
@@ -310,3 +389,5 @@ class Oracle:
         if self.save_output:
             print("Saving output files")
             self.save_forecasts(home_team_forecast_df, away_team_forecast_df)
+
+        return home_team_forecast_df, away_team_forecast_df

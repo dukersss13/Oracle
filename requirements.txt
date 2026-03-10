@@ -9,3 +9,7 @@ nba_api
 h5py
 tensorflow
 beautifulsoup4
+fastapi
+uvicorn[standard]
+sse-starlette
+pyarrow

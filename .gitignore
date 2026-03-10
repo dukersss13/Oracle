@@ -3,3 +3,9 @@ data/seasonal_data
 data/all_logs.csv
 artifacts/active_players.json
 Oracle-env/
+ui/node_modules/
+ui/dist/
+opus_ui/node_modules/
+opus_ui/dist/
+__pycache__/
+artifacts/cache/

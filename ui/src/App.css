@@ -1,0 +1,359 @@
+:root {
+  --bg: #f5ead8;
+  --panel: #fff7e8;
+  --panel-2: #fff2dd;
+  --ink: #1b2129;
+  --muted: #5d6876;
+  --accent: #d96a2f;
+  --accent-2: #15304b;
+  --line: #dbc6ac;
+  --line-2: #b98c5e;
+  --success: #1e8852;
+  --danger: #b03f2f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(255, 211, 152, 0.55) 0%, rgba(245, 234, 216, 0.92) 36%, rgba(236, 223, 202, 0.95) 72%, #eadcc6 100%),
+    repeating-linear-gradient(
+      90deg,
+      rgba(185, 140, 94, 0.08) 0,
+      rgba(185, 140, 94, 0.08) 2px,
+      transparent 2px,
+      transparent 62px
+    );
+}
+
+.app {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent-2);
+  font-weight: 700;
+}
+
+.logo {
+  margin: 4px 0 0;
+  font-size: clamp(1.5rem, 3vw, 2.2rem);
+  letter-spacing: 0.02em;
+  line-height: 1.12;
+}
+
+.tab-row {
+  display: flex;
+  gap: 8px;
+}
+
+.tab {
+  width: auto;
+  min-width: 118px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: #fff;
+  background: linear-gradient(135deg, #2d4a66 0%, #163554 100%);
+  box-shadow: 0 5px 16px rgba(14, 42, 71, 0.2);
+}
+
+.tab.active {
+  background: linear-gradient(135deg, #e57f35 0%, #ce5f22 100%);
+  box-shadow: 0 8px 22px rgba(197, 91, 34, 0.24);
+}
+
+.card {
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  margin-top: 16px;
+  box-shadow:
+    0 10px 24px rgba(46, 32, 16, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.card h2,
+.card h3 {
+  margin: 0 0 12px;
+}
+
+.card h2 {
+  font-size: 1.2rem;
+}
+
+.card h3 {
+  font-size: 1.03rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+input,
+select,
+button {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  font-size: 0.96rem;
+}
+
+input,
+select {
+  background: #fffdf9;
+  color: var(--ink);
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--line-2);
+  box-shadow: 0 0 0 3px rgba(185, 140, 94, 0.18);
+}
+
+button {
+  background: linear-gradient(135deg, #e57f35 0%, #ce5f22 100%);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: 0 8px 20px rgba(198, 92, 34, 0.22);
+}
+
+button:hover {
+  transform: translateY(-1px) scale(1.01);
+}
+
+button.secondary {
+  background: linear-gradient(135deg, #345776 0%, #15304b 100%);
+  box-shadow: 0 8px 20px rgba(14, 42, 71, 0.2);
+}
+
+button.cta {
+  margin-top: 14px;
+}
+
+button.form-cta {
+  margin-top: 14px;
+}
+
+small {
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.today-games-wrap {
+  margin-bottom: 14px;
+}
+
+.today-games-grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 10px;
+}
+
+.game-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fff9ef 0%, #fff2dd 100%);
+  padding: 12px;
+  box-shadow: 0 5px 14px rgba(46, 32, 16, 0.08);
+}
+
+.game-card-teams {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.team-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+
+.team-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.vs {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.game-run-btn {
+  width: 100%;
+  min-height: 40px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 0.95rem;
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
+.check-row input {
+  width: auto;
+  margin: 0;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.action-btn {
+  flex: 1;
+  min-height: 44px;
+  margin-top: 0 !important;
+}
+
+.lineup-row {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.tight-card {
+  margin-top: 0;
+}
+
+.error-text {
+  color: var(--danger);
+  margin: 12px 0 0;
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.event-item {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--success);
+  background: rgba(30, 136, 82, 0.08);
+  border-radius: 8px;
+}
+
+.progress-wrap {
+  margin-bottom: 12px;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--accent-2);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.progress-track {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(21, 48, 75, 0.14);
+  border: 1px solid rgba(21, 48, 75, 0.18);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #e57f35 0%, #ce5f22 100%);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  padding: 9px;
+}
+
+.table th {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-2);
+  background: rgba(21, 48, 75, 0.06);
+}
+
+.table tr:hover td {
+  background: rgba(217, 106, 47, 0.08);
+}
+
+@media (max-width: 720px) {
+  .app {
+    padding: 16px 12px 28px;
+  }
+
+  .button-row {
+    flex-direction: column;
+  }
+
+  .tab-row {
+    width: 100%;
+  }
+
+  .tab {
+    flex: 1;
+  }
+}

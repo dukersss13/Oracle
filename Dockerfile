@@ -1,12 +1,23 @@
-# Use the official Python 3.9 image as the base image
-FROM python:3.9-slim
+FROM python:3.10-slim
 
-# Set the working directory in the container
-WORKDIR /app
+WORKDIR /workspaces/Oracle
 
-# Copy requirements.txt into the container at /app
-COPY requirements.txt .
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies and Python packages
-RUN apt-get update && \
-    pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8000
+EXPOSE 5173
+
+CMD ["python", "main.py"]

@@ -1,4 +1,5 @@
 import os
+import time
 
 import json
 import pandas as pd
@@ -9,6 +10,7 @@ from dataclasses import dataclass
 
 from data_prep.gamelogs import update_data, consolidate_all_game_logs, nba_teams_info
 from data_prep.injury_report import injury_report
+from data_prep.db import OracleCacheDB
 from nba_api.stats.endpoints import playergamelog, commonteamroster
 from nba_api.stats.static import  players
 
@@ -16,8 +18,8 @@ pd.set_option('mode.chained_assignment', None)
 pd.set_option('display.max_columns', None)
 
 
-current_season = ["2024-25", "2023-24", "2022-23", "2021-22"]
-collected_seasons = ["2024-25", "2023-24", "2022-23", "2021-22"]
+current_season = ["2024-25", "2023-24", "2022-23"]
+collected_seasons = ["2024-25", "2023-24", "2022-23"]
 
 class Team(Enum):
     HOME = 0
@@ -37,7 +39,12 @@ class GamePlan:
 
 class LockerRoom:
     def __init__(self, game_details: dict, features: list,
-                 fetch_new_data: bool, holdout: bool):
+                 fetch_new_data: bool, holdout: bool,
+                 active_players_override: dict | None = None,
+                 interactive: bool = True,
+                 force_refresh_cache: bool = False,
+                 cache_strategy: str = "incremental",
+                 cache_ttl_hours: int = 12):
         """
         Initialize the Locker Room
 
@@ -58,6 +65,12 @@ class LockerRoom:
 
         self.predictors_plus_label = features
         self.nba_teams_info = nba_teams_info
+        self.interactive = interactive
+        self.active_players_override = active_players_override
+        self.force_refresh_cache = force_refresh_cache
+        self.cache_strategy = cache_strategy.lower()
+        self.cache_ttl_hours = int(cache_ttl_hours)
+        self.db_cache = OracleCacheDB()
 
         self._fetch_teams_data(fetch_new_data)
 
@@ -87,6 +100,14 @@ class LockerRoom:
         Set the game plan such as active players & matchups
         """
         self._update_game_plan()
+        if self.active_players_override:
+            self.set_active_players_from_dict(self.active_players_override)
+            return
+
+        if not self.interactive:
+            self.set_active_players()
+            return
+
         set_active_players = LockerRoom._pause_for_configurations()
 
         if set_active_players == 1:
@@ -98,11 +119,27 @@ class LockerRoom:
         """
         Grab the logs for all games
         """
+        dataset_key = f"all_logs_{'_'.join(collected_seasons)}"
+
         if fetch_new_data:
             update_data(current_season)
             consolidate_all_game_logs(collected_seasons, current_season)
+            csv_logs = pd.read_csv("data/all_logs.csv", low_memory=False)
+            csv_logs = csv_logs[csv_logs["SEASON_YEAR"].isin(collected_seasons)]
+            self.db_cache.upsert_dataset_df(dataset_key, csv_logs)
+            self.all_logs = csv_logs
+            return
 
-        self.all_logs = pd.read_csv("data/all_logs.csv", low_memory=False)
+        db_logs = self.db_cache.get_dataset_df(dataset_key, ttl_hours=None)
+        if db_logs is not None and not db_logs.empty:
+            self.all_logs = db_logs
+            return
+
+        # Bootstrap DB from disk once, then continue DB-first.
+        csv_logs = pd.read_csv("data/all_logs.csv", low_memory=False)
+        csv_logs = csv_logs[csv_logs["SEASON_YEAR"].isin(collected_seasons)]
+        self.db_cache.upsert_dataset_df(dataset_key, csv_logs)
+        self.all_logs = csv_logs
 
     @staticmethod
     def _pause_for_configurations() -> int:
@@ -138,11 +175,52 @@ class LockerRoom:
         else:
             team_lookup_tuple[1] = team_lookup_tuple[1].capitalize()
 
-        team_id = self.fetch_teams_id(team_lookup_tuple)
-        team_roster = commonteamroster.CommonTeamRoster(team_id=team_id,
-                                                        season=current_season).get_data_frames()[0][["PLAYER", "PLAYER_ID"]]
-        
-        return team_roster
+        team_id = int(self.fetch_teams_id(team_lookup_tuple))
+        season = current_season[0]
+        db_roster = self.db_cache.get_roster(team_id, season, ttl_hours=self.cache_ttl_hours)
+
+        if self.cache_strategy == "cache-only":
+            if db_roster is not None and not db_roster.empty:
+                return db_roster
+            return pd.DataFrame(columns=["PLAYER", "PLAYER_ID"])
+
+        if db_roster is not None and not db_roster.empty and not self.force_refresh_cache:
+            return db_roster
+
+        retries = int(os.environ.get("ORACLE_ROSTER_RETRIES", "3"))
+        backoff_seconds = float(os.environ.get("ORACLE_ROSTER_BACKOFF", "1.5"))
+        request_timeout = int(os.environ.get("ORACLE_NBA_API_TIMEOUT", "20"))
+        last_error = None
+
+        for attempt in range(1, retries + 1):
+            try:
+                team_roster = commonteamroster.CommonTeamRoster(
+                    team_id=team_id,
+                    season=season,
+                    timeout=request_timeout,
+                ).get_data_frames()[0][["PLAYER", "PLAYER_ID"]]
+                self.db_cache.upsert_roster(team_id, season, team_roster)
+                return team_roster
+            except Exception as exc:
+                last_error = exc
+                if attempt < retries:
+                    print(
+                        f"WARNING: roster fetch failed for team_id={team_id} "
+                        f"(attempt {attempt}/{retries}); retrying..."
+                    )
+                    time.sleep(backoff_seconds * attempt)
+
+        # If live fetch fails, fall back to stale DB cache when available.
+        stale_db_roster = self.db_cache.get_roster(team_id, season, ttl_hours=None)
+        if stale_db_roster is not None and not stale_db_roster.empty:
+            print(f"WARNING: using cached DB roster for team_id={team_id} after API failures.")
+            return stale_db_roster
+
+        print(
+            f"WARNING: unable to fetch roster for team_id={team_id} after {retries} attempts. "
+            "Proceeding with an empty roster."
+        )
+        return pd.DataFrame(columns=["PLAYER", "PLAYER_ID"])
 
     def get_most_recent_game_date(self, players_game_logs_df: pd.DataFrame) -> pd.Timestamp:
         """
@@ -171,6 +249,20 @@ class LockerRoom:
             active_players = active_players_df[(~np.isin(active_players_df.index.values, injured_players) & \
                                                           (active_players_df["Mins"]!=0).values)]
             team_data.active_players = team_data.team_roster[np.isin(team_data.team_roster["PLAYER"], active_players.index)].set_index("PLAYER")
+            team_data.players_mins = active_players.to_dict()["Mins"]
+
+    def set_active_players_from_dict(self, active_players_json: dict):
+        """Set active players from an in-memory dict, used by API workflows."""
+        for team in active_players_json:
+            if team not in [self.home_team, self.away_team]:
+                continue
+
+            team_data = self.home_game_plan if team == self.home_team else self.away_game_plan
+            active_players_df = pd.DataFrame(active_players_json[team], index=["Mins"]).T
+            active_players = active_players_df[active_players_df["Mins"] != 0]
+            team_data.active_players = team_data.team_roster[
+                np.isin(team_data.team_roster["PLAYER"], active_players.index)
+            ].set_index("PLAYER")
             team_data.players_mins = active_players.to_dict()["Mins"]
 
     def _update_game_plan(self):
@@ -223,10 +315,97 @@ class LockerRoom:
         :param players_id: player ID
         :return: the given player's game logs in df format
         """
-        players_game_log = playergamelog.PlayerGameLog(player_id=players_id, season=season,
-                                                       season_type_all_star="Regular Season").get_data_frames()[0]
+        normalized_player_id = self._normalize_player_id(players_id)
+        db_cached_df = self.db_cache.get_player_logs(normalized_player_id, season, ttl_hours=self.cache_ttl_hours)
+        stale_db_cached_df = self.db_cache.get_player_logs(normalized_player_id, season, ttl_hours=None)
 
-        return players_game_log
+        if db_cached_df is not None and not db_cached_df.empty:
+            cached_df = db_cached_df
+        else:
+            cached_df = stale_db_cached_df if stale_db_cached_df is not None else pd.DataFrame()
+
+        if self.cache_strategy == "cache-only":
+            return cached_df
+
+        # For past games, start inference from DB-cached training data.
+        if self.holdout and not cached_df.empty and not self.force_refresh_cache:
+            return cached_df
+
+        if self.cache_strategy == "full" or self.force_refresh_cache:
+            fresh_df = self._fetch_player_gamelog_with_retry(normalized_player_id, season)
+            self.db_cache.upsert_player_logs(normalized_player_id, season, fresh_df)
+            return fresh_df
+
+        if self.cache_strategy == "incremental" and not cached_df.empty and db_cached_df is not None:
+            return cached_df
+
+        # Incremental mode: try pulling latest data from nba_api and merge with cache.
+        try:
+            fresh_df = self._fetch_player_gamelog_with_retry(normalized_player_id, season)
+            merged_df = self._merge_game_logs(cached_df, fresh_df)
+            self.db_cache.upsert_player_logs(normalized_player_id, season, merged_df)
+            return merged_df
+        except Exception:
+            if not cached_df.empty:
+                print(
+                    f"WARNING: using cached game logs for player_id={normalized_player_id} "
+                    f"season={season} after API failure."
+                )
+                return cached_df
+            raise
+
+    @staticmethod
+    def _merge_game_logs(cached_df: pd.DataFrame, fresh_df: pd.DataFrame) -> pd.DataFrame:
+        if cached_df.empty:
+            return fresh_df
+        if fresh_df.empty:
+            return cached_df
+
+        combined = pd.concat([fresh_df, cached_df], axis=0, ignore_index=True)
+        game_id_col = "Game_ID" if "Game_ID" in combined.columns else "GAME_ID" if "GAME_ID" in combined.columns else None
+
+        if game_id_col:
+            combined = combined.drop_duplicates(subset=[game_id_col], keep="first")
+        else:
+            combined = combined.drop_duplicates(keep="first")
+
+        if "GAME_DATE" in combined.columns:
+            # Preserve latest-first ordering chronologically even with string dates.
+            combined["_GAME_DATE_SORT"] = pd.to_datetime(combined["GAME_DATE"], errors="coerce")
+            combined = combined.sort_values(by="_GAME_DATE_SORT", ascending=False)
+            combined = combined.drop(columns=["_GAME_DATE_SORT"])
+
+        return combined.reset_index(drop=True)
+
+    @staticmethod
+    def _fetch_player_gamelog_with_retry(player_id: int, season: str) -> pd.DataFrame:
+        retries = int(os.environ.get("ORACLE_PLAYERLOG_RETRIES", "3"))
+        backoff_seconds = float(os.environ.get("ORACLE_PLAYERLOG_BACKOFF", "1.0"))
+        request_timeout = int(os.environ.get("ORACLE_NBA_API_TIMEOUT", "20"))
+        last_error = None
+
+        for attempt in range(1, retries + 1):
+            try:
+                return playergamelog.PlayerGameLog(
+                    player_id=player_id,
+                    season=season,
+                    season_type_all_star="Regular Season",
+                    timeout=request_timeout,
+                ).get_data_frames()[0]
+            except Exception as exc:
+                last_error = exc
+                if attempt < retries:
+                    time.sleep(backoff_seconds * attempt)
+
+        raise RuntimeError(
+            f"Failed to fetch game logs for player_id={player_id}, season={season} after {retries} attempts"
+        ) from last_error
+
+    @staticmethod
+    def _normalize_player_id(players_id: str | int) -> int:
+        if hasattr(players_id, "values"):
+            return int(players_id.values[0])
+        return int(players_id)
 
     def get_filtered_players_logs(self, players_id: int) -> tuple[pd.DataFrame, int]:
         """
@@ -241,8 +420,12 @@ class LockerRoom:
                 players_game_logs_df = self.fetch_players_game_logs_df(players_id, season)
                 if not players_game_logs_df.empty:
                     all_logs.append(players_game_logs_df)
-            except:
-                print(f"Logs for playerID: {players_id.values[0]} for {season} cannot be fetched.")
+            except Exception:
+                print(f"Logs for playerID: {self._normalize_player_id(players_id)} for {season} cannot be fetched.")
+
+        if not all_logs:
+            return pd.DataFrame(), 0
+
         all_logs = pd.concat(all_logs, axis=0)
         actual_points = 0   
         if not all_logs.empty:

@@ -4,9 +4,9 @@ import numpy as np
 
 import tensorflow as tf
 from keras import Sequential, regularizers, losses
-from keras.layers import Dense, GRU, Dropout, Input, BatchNormalization
+from keras.layers import Dense, GRU, Dropout, Input
 from keras.optimizers import SGD, Adam
-from keras.callbacks import EarlyStopping
+from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 
@@ -36,7 +36,7 @@ class NeuralNet:
 
     def _create_neural_network(self) -> Sequential:
         if self.nn_config["type"] == "GRU":
-            model = self._create_GRU_nn()
+            model = self._create_gru_nn()
         else:
             model = self._create_sequential_nn()
         
@@ -56,11 +56,8 @@ class NeuralNet:
     def _create_gru_nn(self) -> Sequential:
         model = Sequential([
             Input(shape=(self.timesteps, self.input_shape)),
-            GRU(
-                units=64,
-                dropout=0.2,
-                return_sequences=True
-            ),
+            GRU(units=64, dropout=0.2, return_sequences=True),
+            GRU(units=32, dropout=0.15, return_sequences=False),
             Dense(128, activation=self.activation_func),
             Dropout(0.2),
 
@@ -141,11 +138,22 @@ class NeuralNet:
         Reshape the input shape for GRU
         """
         remainder = input_array.shape[0] % self.timesteps
-        batch_size = input_array.shape[0] // self.timesteps
         if remainder:
-            input_array = input_array[:-remainder]
+            pad_rows = self.timesteps - remainder
+            padding = np.repeat(input_array[-1:, :], repeats=pad_rows, axis=0)
+            input_array = np.vstack([input_array, padding])
+
+        batch_size = input_array.shape[0] // self.timesteps
 
         return input_array.reshape(batch_size, self.timesteps, input_array.shape[1])
+
+    def reshape_targets_for_gru(self, y_train: np.ndarray) -> np.ndarray:
+        remainder = y_train.shape[0] % self.timesteps
+        if remainder:
+            pad_rows = self.timesteps - remainder
+            y_train = np.concatenate([y_train, np.repeat(y_train[-1], pad_rows)])
+        y_train = y_train.reshape(-1, self.timesteps)
+        return y_train[:, -1]
     
     @staticmethod
     def plot_val_loss(history):
@@ -171,7 +179,15 @@ class NeuralNet:
         :param training_data: training data
         :param x_test: testing input
         """
-        callbacks = EarlyStopping(monitor="val_loss", min_delta=1e-6, patience=self.nn_config["patience"], restore_best_weights=True)
+        callbacks = [
+            EarlyStopping(
+                monitor="val_loss",
+                min_delta=1e-6,
+                patience=self.nn_config["patience"],
+                restore_best_weights=True,
+            ),
+            ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=20, min_lr=1e-5),
+        ]
 
         x_train, y_train = training_data
 
@@ -180,12 +196,14 @@ class NeuralNet:
 
         if self.nn_config["type"] == "GRU":
             x_train = self.reshape_input_shape(x_train)
+            y_train = self.reshape_targets_for_gru(y_train)
             x_test = x_test.reshape(1, self.timesteps, x_test.shape[1])
 
         x_train, y_train = tf.convert_to_tensor(x_train, dtype=tf.float32), tf.convert_to_tensor(y_train, dtype=tf.float32)
         x_test = tf.convert_to_tensor(x_test, dtype=tf.float32)
 
-        _ = self.model.fit(x_train, y_train, batch_size=24, epochs=self.nn_config["epochs"], callbacks=[callbacks],
+        batch_size = 16 if self.nn_config["type"] == "GRU" else 24
+        _ = self.model.fit(x_train, y_train, batch_size=batch_size, epochs=self.nn_config["epochs"], callbacks=callbacks,
                         verbose=self.nn_config["verbose"], validation_split=self.nn_config["validation_split"])
 
         forecasted_values = int(np.round(self.predict(x_test)))

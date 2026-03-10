@@ -2,8 +2,22 @@ import os
 import pandas as pd
 
 from nba_api.stats.endpoints import teamgamelogs, leaguedashptteamdefend, teamestimatedmetrics
+from data_prep.db import OracleCacheDB
 
-nba_teams_info = pd.read_csv("data/static_data/static_team_info.csv", index_col=0)
+
+def _load_nba_teams_info() -> pd.DataFrame:
+    db_cache = OracleCacheDB()
+    dataset_key = "static_team_info"
+    cached_df = db_cache.get_dataset_df(dataset_key, ttl_hours=None)
+    if cached_df is not None and not cached_df.empty:
+        return cached_df
+
+    csv_df = pd.read_csv("data/static_data/static_team_info.csv", index_col=0)
+    db_cache.upsert_dataset_df(dataset_key, csv_df)
+    return csv_df
+
+
+nba_teams_info = _load_nba_teams_info()
 
 
 def fetch_defensive_stats(seasons: list[str], season_segment: str=None):

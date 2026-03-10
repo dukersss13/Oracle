@@ -5,6 +5,59 @@ Oracle is an NBA forecasting model that leverages data from [nba_api](https://gi
 
 Oracle can fetch the latest data thanks to NBA API library. It only retrieves the latest 3 seasons for training purposes to avoid noise caused by players' ascension or descension. 
 
+### Cache + Fresh Data Behavior
+Oracle caches team rosters, player game logs, and consolidated training data in a local SQLite DB.
+
+The cache is persisted in:
+
+- SQLite DB: `artifacts/cache/oracle_cache.db`
+- Roster table: `roster_cache`
+- Player logs table: `player_logs_cache`
+- Consolidated training table: `dataset_cache`
+
+`dataset_cache` also stores static team metadata (`static_team_info`) so runtime reads are DB-first.
+
+Retention policy:
+
+- DB keeps data for the previous 3 seasons used in training/inference.
+- For past-game predictions (holdout mode), Oracle starts inference from DB-cached training data.
+- CSV/Parquet cache under `artifacts/cache` is retired from inference paths.
+
+### Preload Cache For Inference
+To avoid live `nba_api` calls during inference, preload the DB first:
+
+```bash
+/Users/I541997/Desktop/Oracle/Oracle-env/bin/python scripts/preload_training_cache.py
+```
+
+Then run inference with cache-only behavior (default in API path):
+
+```bash
+ORACLE_CACHE_STRATEGY=cache-only /Users/I541997/Desktop/Oracle/Oracle-env/bin/python main.py
+```
+
+If you need to rebuild cache from `nba_api`, run preload again with refresh controls:
+
+```bash
+ORACLE_PRELOAD_REFRESH_ALL_LOGS=1 ORACLE_PRELOAD_RETRIES=3 ORACLE_PRELOAD_BACKOFF=1.0 /Users/I541997/Desktop/Oracle/Oracle-env/bin/python scripts/preload_training_cache.py
+```
+
+- Default mode: `incremental`
+	- Load cached roster/logs when available.
+	- Pull latest records from `nba_api` and merge only new games into cache.
+	- If `nba_api` is temporarily unavailable, Oracle falls back to cached data.
+- Optional modes:
+	- `full`: force refresh from API and rewrite cache
+	- `cache-only`: never call API, use cache only
+
+Environment knobs:
+
+- `ORACLE_CACHE_STRATEGY` = `incremental|full|cache-only`
+- `ORACLE_CACHE_TTL_HOURS` = cache freshness threshold (default `12`)
+- `ORACLE_REFRESH_CACHE` = `1` to force refresh behavior
+- `ORACLE_FETCH_NEW_DATA` = `1` to refresh consolidated seasonal logs (`data/all_logs.csv`)
+- `ORACLE_PLAYERLOG_RETRIES` and `ORACLE_PLAYERLOG_BACKOFF` for player log retry tuning
+
 
 ### Architecture Overview
 
