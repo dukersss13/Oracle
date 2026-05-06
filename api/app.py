@@ -11,12 +11,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from nba_api.stats.endpoints import commonteamroster, scoreboardv2
+from nba_api.stats.endpoints import commonteamroster, scoreboardv3
 from sse_starlette.sse import EventSourceResponse
 
 from api.schemas import (
     ForecastRequest,
     ForecastResponse,
+    InjuryEntry,
     PlayerForecast,
     RosterPlayer,
     TeamForecast,
@@ -26,7 +27,11 @@ from api.schemas import (
 from data_prep.db import OracleCacheDB
 from data_prep.gamelogs import nba_teams_info
 from models.oracle import Oracle
-from scripts.preload_training_cache import preload_all_logs_dataset, preload_rosters_and_player_logs
+from scripts.preload_training_cache import (
+    get_current_nba_season,
+    preload_all_logs_dataset,
+    preload_rosters_and_player_logs,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -92,7 +97,7 @@ def get_roster(nickname: str):
         raise HTTPException(404, f"Team '{nickname}' not found")
     team_id = int(team_row["id"].values[0])
 
-    season = "2024-25"
+    season = get_current_nba_season()
     cache_ttl_hours = int(os.environ.get("ORACLE_CACHE_TTL_HOURS", "12"))
     cached_db_roster = _db_cache.get_roster(team_id, season, ttl_hours=cache_ttl_hours)
     if cached_db_roster is not None and not cached_db_roster.empty and os.environ.get("ORACLE_REFRESH_CACHE", "0") != "1":
@@ -105,30 +110,43 @@ def get_roster(nickname: str):
     retries = int(os.environ.get("ORACLE_ROSTER_RETRIES", "3"))
     backoff_seconds = float(os.environ.get("ORACLE_ROSTER_BACKOFF", "1.5"))
     request_timeout = int(os.environ.get("ORACLE_NBA_API_TIMEOUT", "20"))
-    last_error = None
     roster_df = None
 
-    for attempt in range(1, retries + 1):
-        try:
-            roster_df = commonteamroster.CommonTeamRoster(
-                team_id=team_id,
-                season=season,
-                timeout=request_timeout,
-            ).get_data_frames()[0][["PLAYER", "PLAYER_ID"]]
-            _db_cache.upsert_roster(team_id, season, roster_df)
+    # Try current season, then fall back to previous season
+    season_start_year = int(season.split("-")[0])
+    prev_season = f"{season_start_year - 1}-{season_start_year % 100:02d}"
+    seasons_to_try = [season, prev_season]
+
+    for try_season in seasons_to_try:
+        for attempt in range(1, retries + 1):
+            try:
+                roster_df = commonteamroster.CommonTeamRoster(
+                    team_id=team_id,
+                    season=try_season,
+                    timeout=request_timeout,
+                ).get_data_frames()[0][["PLAYER", "PLAYER_ID"]]
+                _db_cache.upsert_roster(team_id, try_season, roster_df)
+                if try_season != season:
+                    logger.info("Roster fetched from fallback season %s for team_id=%s", try_season, team_id)
+                break
+            except Exception:
+                if attempt < retries:
+                    time.sleep(backoff_seconds * attempt)
+        if roster_df is not None:
             break
-        except Exception as exc:
-            last_error = exc
-            if attempt < retries:
-                time.sleep(backoff_seconds * attempt)
 
     if roster_df is None:
-        stale_roster = _db_cache.get_roster(team_id, season, ttl_hours=None)
-        if stale_roster is not None and not stale_roster.empty:
-            roster_df = stale_roster
-        else:
-            logger.warning("Roster unavailable for team_id=%s; returning empty roster", team_id)
-            roster_df = pd.DataFrame(columns=["PLAYER", "PLAYER_ID"])
+        # Try stale cache for current or previous season
+        for try_season in seasons_to_try:
+            stale_roster = _db_cache.get_roster(team_id, try_season, ttl_hours=None)
+            if stale_roster is not None and not stale_roster.empty:
+                roster_df = stale_roster
+                logger.info("Using stale cached roster (season=%s) for team_id=%s", try_season, team_id)
+                break
+
+    if roster_df is None or roster_df.empty:
+        logger.warning("Roster unavailable for team_id=%s; returning empty roster", team_id)
+        roster_df = pd.DataFrame(columns=["PLAYER", "PLAYER_ID"])
 
     return [
         RosterPlayer(player_name=row["PLAYER"], player_id=int(row["PLAYER_ID"]))
@@ -142,22 +160,24 @@ def get_todays_games():
     today_ts = pd.Timestamp.now().normalize()
     date_candidates = [today_ts, today_ts - pd.Timedelta(days=1), today_ts + pd.Timedelta(days=1)]
 
-    header_df = pd.DataFrame()
+    games = []
     any_fetch_succeeded = False
     for candidate in date_candidates:
-        game_date = candidate.strftime("%m/%d/%Y")
+        game_date = candidate.strftime("%Y-%m-%d")
         try:
-            board = scoreboardv2.ScoreboardV2(game_date=game_date, timeout=timeout)
-            candidate_df = board.game_header.get_data_frame()
+            board = scoreboardv3.ScoreboardV3(game_date=game_date, timeout=timeout)
+            data = board.get_dict()
+            scoreboard = data.get("scoreboard", {})
+            game_list = scoreboard.get("games", [])
             any_fetch_succeeded = True
-            if not candidate_df.empty:
-                logger.info("Loaded today's matchups from scoreboard date=%s", game_date)
-                header_df = candidate_df
+            if game_list:
+                logger.info("Loaded %d matchups from ScoreboardV3 date=%s", len(game_list), game_date)
+                games = game_list
                 break
         except Exception:
-            logger.warning("Scoreboard fetch failed for date=%s", game_date, exc_info=True)
+            logger.warning("ScoreboardV3 fetch failed for date=%s", game_date, exc_info=True)
 
-    if header_df.empty:
+    if not games:
         if not any_fetch_succeeded:
             raise HTTPException(503, "Matchups temporarily unavailable")
         logger.info("No games found across date candidates around today")
@@ -168,20 +188,33 @@ def get_todays_games():
         for _, row in nba_teams_info.iterrows()
     }
 
+    seen_ids = set()
     options: list[TodayGameOption] = []
-    for _, row in header_df.drop_duplicates(subset=["GAME_ID"]).iterrows():
-        game_id = str(row["GAME_ID"])
-        home_team_id = int(row["HOME_TEAM_ID"])
-        away_team_id = int(row["VISITOR_TEAM_ID"])
-        home_team = team_id_to_nickname.get(home_team_id, str(home_team_id))
-        away_team = team_id_to_nickname.get(away_team_id, str(away_team_id))
-        home_abb = nba_teams_info[nba_teams_info["id"] == home_team_id]["abbreviation"].values[0]
-        away_abb = nba_teams_info[nba_teams_info["id"] == away_team_id]["abbreviation"].values[0]
-        game_date = pd.to_datetime(row["GAME_DATE_EST"]).strftime("%m-%d-%Y")
+    for g in games:
+        game_id = str(g.get("gameId", ""))
+        if game_id in seen_ids:
+            continue
+        seen_ids.add(game_id)
+
+        home_info = g.get("homeTeam", {})
+        away_info = g.get("awayTeam", {})
+        home_team_id = int(home_info.get("teamId", 0))
+        away_team_id = int(away_info.get("teamId", 0))
+        home_team = team_id_to_nickname.get(home_team_id, home_info.get("teamName", str(home_team_id)))
+        away_team = team_id_to_nickname.get(away_team_id, away_info.get("teamName", str(away_team_id)))
+        home_abb = home_info.get("teamTricode", "")
+        away_abb = away_info.get("teamTricode", "")
+
+        game_time = g.get("gameEt", "")
+        try:
+            game_date_str = pd.to_datetime(game_time).strftime("%m-%d-%Y")
+        except Exception:
+            game_date_str = today_ts.strftime("%m-%d-%Y")
+
         options.append(
             TodayGameOption(
                 game_id=game_id,
-                game_date=game_date,
+                game_date=game_date_str,
                 home_team_id=home_team_id,
                 away_team_id=away_team_id,
                 home_abbreviation=home_abb,
@@ -207,6 +240,19 @@ def start_data_refresh():
 @app.get("/api/data/refresh")
 def get_data_refresh_status():
     return _refresh_job
+
+
+@app.get("/api/injuries", response_model=list[InjuryEntry])
+def get_injuries():
+    """Fetch current NBA injury report (players ruled Out)."""
+    from data_prep.injury_report import fetch_current_injuries
+
+    try:
+        entries = fetch_current_injuries()
+    except Exception:
+        logger.exception("Failed to fetch injury report")
+        entries = []
+    return [InjuryEntry(**e) for e in entries]
 
 
 def _default_features() -> list[str]:
@@ -279,6 +325,8 @@ def _run_forecast_in_thread(forecast_id: str, req: ForecastRequest):
     try:
         cache_strategy = os.environ.get("ORACLE_CACHE_STRATEGY", "cache-only").lower()
         fetch_new_data = os.environ.get("ORACLE_FETCH_NEW_DATA", "0") == "1"
+        if req.model.upper() != "TRANSFORMER":
+            logger.warning("Ignoring requested model '%s'; forcing TRANSFORMER", req.model)
         game_details = {
             "home_team": req.home_team,
             "away_team": req.away_team,
@@ -286,7 +334,7 @@ def _run_forecast_in_thread(forecast_id: str, req: ForecastRequest):
             "new_game": True,
         }
         oracle_config = {
-            "model": req.model,
+            "model": "TRANSFORMER",
             "features": _default_features(),
             "holdout": req.holdout,
             "fetch_new_data": fetch_new_data,

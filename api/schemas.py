@@ -32,7 +32,7 @@ class ForecastRequest(BaseModel):
     home_team: str
     away_team: str
     game_date: str
-    model: str = "NN"
+    model: str = "TRANSFORMER"  # NN, XGBOOST, or TRANSFORMER
     holdout: bool = False
     lineup: Optional[dict[str, dict[str, Optional[float]]]] = None
 
@@ -55,3 +55,10 @@ class ForecastResponse(BaseModel):
     status: str
     home_forecast: Optional[TeamForecast] = None
     away_forecast: Optional[TeamForecast] = None
+
+
+class InjuryEntry(BaseModel):
+    name: str
+    team: str
+    date: str
+    description: str

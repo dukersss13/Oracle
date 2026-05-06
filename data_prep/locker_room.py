@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+from datetime import datetime
 
 import json
 import pandas as pd
@@ -24,6 +25,13 @@ pd.set_option('display.max_columns', None)
 
 current_season = ["2024-25", "2023-24", "2022-23"]
 collected_seasons = ["2024-25", "2023-24", "2022-23"]
+
+
+def _current_nba_season(current_dt: datetime | None = None) -> str:
+    if current_dt is None:
+        current_dt = datetime.now()
+    season_start_year = current_dt.year if current_dt.month >= 10 else current_dt.year - 1
+    return f"{season_start_year}-{(season_start_year + 1) % 100:02d}"
 
 class Team(Enum):
     HOME = 0
@@ -190,56 +198,56 @@ class LockerRoom:
             team_lookup_tuple[1] = team_lookup_tuple[1].capitalize()
 
         team_id = int(self.fetch_teams_id(team_lookup_tuple))
-        season = current_season[0]
-        db_roster = self.db_cache.get_roster(team_id, season, ttl_hours=self.cache_ttl_hours)
+        season = _current_nba_season()
+        season_start_year = int(season.split("-")[0])
+        prev_season = f"{season_start_year - 1}-{season_start_year % 100:02d}"
+        seasons_to_try = [season, prev_season]
+
+        # Check fresh cache first (any season)
+        for try_season in seasons_to_try:
+            db_roster = self.db_cache.get_roster(team_id, try_season, ttl_hours=self.cache_ttl_hours)
+            if db_roster is not None and not db_roster.empty:
+                if self.cache_strategy == "cache-only" or not self.force_refresh_cache:
+                    return db_roster
 
         if self.cache_strategy == "cache-only":
-            if db_roster is not None and not db_roster.empty:
-                return db_roster
             return pd.DataFrame(columns=["PLAYER", "PLAYER_ID"])
-
-        if db_roster is not None and not db_roster.empty and not self.force_refresh_cache:
-            return db_roster
 
         retries = int(os.environ.get("ORACLE_ROSTER_RETRIES", "3"))
         backoff_seconds = float(os.environ.get("ORACLE_ROSTER_BACKOFF", "1.5"))
         request_timeout = int(os.environ.get("ORACLE_NBA_API_TIMEOUT", "20"))
-        last_error = None
 
-        for attempt in range(1, retries + 1):
-            try:
-                team_roster = commonteamroster.CommonTeamRoster(
-                    team_id=team_id,
-                    season=season,
-                    timeout=request_timeout,
-                ).get_data_frames()[0][["PLAYER", "PLAYER_ID"]]
-                self.db_cache.upsert_roster(team_id, season, team_roster)
-                return team_roster
-            except Exception as exc:
-                last_error = exc
-                if attempt < retries:
-                    print(
-                        f"WARNING: roster fetch failed for team_id={team_id} "
-                        f"(attempt {attempt}/{retries}); retrying..."
-                    )
-                    logger.warning(
-                        "Roster fetch failed for team_id=%s (attempt %s/%s); retrying",
-                        team_id,
-                        attempt,
-                        retries,
-                    )
-                    time.sleep(backoff_seconds * attempt)
+        # Try fetching from API: current season first, then previous
+        for try_season in seasons_to_try:
+            for attempt in range(1, retries + 1):
+                try:
+                    team_roster = commonteamroster.CommonTeamRoster(
+                        team_id=team_id,
+                        season=try_season,
+                        timeout=request_timeout,
+                    ).get_data_frames()[0][["PLAYER", "PLAYER_ID"]]
+                    self.db_cache.upsert_roster(team_id, try_season, team_roster)
+                    if try_season != season:
+                        logger.info("Roster fetched from fallback season %s for team_id=%s", try_season, team_id)
+                    return team_roster
+                except Exception as exc:
+                    if attempt < retries:
+                        logger.warning(
+                            "Roster fetch failed for team_id=%s season=%s (attempt %s/%s); retrying",
+                            team_id, try_season, attempt, retries,
+                        )
+                        time.sleep(backoff_seconds * attempt)
 
-        # If live fetch fails, fall back to stale DB cache when available.
-        stale_db_roster = self.db_cache.get_roster(team_id, season, ttl_hours=None)
-        if stale_db_roster is not None and not stale_db_roster.empty:
-            logger.warning("Using stale cached roster for team_id=%s after API failures", team_id)
-            return stale_db_roster
+        # If all live fetches fail, fall back to stale DB cache (any season)
+        for try_season in seasons_to_try:
+            stale_db_roster = self.db_cache.get_roster(team_id, try_season, ttl_hours=None)
+            if stale_db_roster is not None and not stale_db_roster.empty:
+                logger.warning("Using stale cached roster (season=%s) for team_id=%s after API failures", try_season, team_id)
+                return stale_db_roster
 
         logger.warning(
-            "Unable to fetch roster for team_id=%s after %s attempts; returning empty roster",
+            "Unable to fetch roster for team_id=%s; returning empty roster",
             team_id,
-            retries,
         )
         return pd.DataFrame(columns=["PLAYER", "PLAYER_ID"])
 

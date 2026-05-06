@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime
 
 import pandas as pd
 from nba_api.stats.endpoints import commonteamroster, playergamelog
@@ -8,6 +9,82 @@ from data_prep.db import OracleCacheDB
 from data_prep.gamelogs import consolidate_all_game_logs, nba_teams_info, update_data
 
 SEASONS = ["2024-25", "2023-24", "2022-23"]
+
+
+def get_current_nba_season(current_dt: datetime | None = None) -> str:
+    """Return NBA season label for the provided/current date (e.g. '2025-26')."""
+    if current_dt is None:
+        current_dt = datetime.now()
+    season_start_year = current_dt.year if current_dt.month >= 10 else current_dt.year - 1
+    return f"{season_start_year}-{(season_start_year + 1) % 100:02d}"
+
+
+def fetch_latest_rosters_to_current_date(db: OracleCacheDB | None = None) -> dict[str, int | str]:
+    """Refresh all team rosters for the current NBA season and cache them in SQLite."""
+    if db is None:
+        db = OracleCacheDB()
+
+    season = get_current_nba_season()
+    season_start_year = int(season.split("-")[0])
+    prev_season = f"{season_start_year - 1}-{season_start_year % 100:02d}"
+    cache_ttl_hours = int(os.environ.get("ORACLE_CACHE_TTL_HOURS", "12"))
+    retries = int(os.environ.get("ORACLE_PRELOAD_RETRIES", "3"))
+    backoff = float(os.environ.get("ORACLE_PRELOAD_BACKOFF", "1.0"))
+    timeout = int(os.environ.get("ORACLE_NBA_API_TIMEOUT", "20"))
+
+    teams_processed = 0
+    roster_rows = 0
+    failures = 0
+
+    for _, team in nba_teams_info.iterrows():
+        team_id = int(team["id"])
+
+        # Skip if we already have a fresh cached roster (any season)
+        cached = None
+        for s in [season, prev_season]:
+            cached = db.get_roster(team_id, s, ttl_hours=cache_ttl_hours)
+            if cached is not None and not cached.empty:
+                break
+        if cached is not None and not cached.empty:
+            teams_processed += 1
+            roster_rows += len(cached)
+            continue
+
+        fetched = False
+
+        # Try current season first, fall back to previous
+        for try_season in [season, prev_season]:
+            def _get_roster(_s=try_season):
+                return commonteamroster.CommonTeamRoster(
+                    team_id=team_id,
+                    season=_s,
+                    timeout=timeout,
+                ).get_data_frames()[0][["PLAYER", "PLAYER_ID"]]
+
+            try:
+                roster_df = _retry_fetch(_get_roster, retries, backoff, f"roster team_id={team_id} season={try_season}")
+                db.upsert_roster(team_id, try_season, roster_df)
+                teams_processed += 1
+                roster_rows += len(roster_df)
+                fetched = True
+                break
+            except Exception:
+                pass
+
+        if not fetched:
+            failures += 1
+            print(f"WARN: skipping roster team_id={team_id}: all seasons failed")
+
+    print(
+        "Current-season roster refresh complete: "
+        f"season={season}, teams={teams_processed}, roster_rows={roster_rows}, failures={failures}"
+    )
+    return {
+        "season": season,
+        "teams_processed": teams_processed,
+        "roster_rows": roster_rows,
+        "failures": failures,
+    }
 
 
 def _retry_fetch(fn, retries: int, backoff_seconds: float, label: str):

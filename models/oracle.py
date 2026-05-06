@@ -10,9 +10,12 @@ from pyhocon import ConfigFactory
 from data_prep.locker_room import LockerRoom, Team
 from models.neural_networks import NeuralNet
 from models.ml_models import XGBoost
+from models.transformer import TeamTransformer
 
 
 logger = logging.getLogger(__name__)
+
+_TRANSFORMER_MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "artifacts", "models", "team_transformer")
 
 
 class Oracle:
@@ -58,6 +61,8 @@ class Oracle:
             self.model_config = model_config["nn_config"]
         elif model_chosen == "XGBOOST":
             self.model_config = model_config["xgboost_config"]
+        elif model_chosen == "TRANSFORMER":
+            self.model_config = model_config["transformer_config"]
         else:
             raise ValueError(f"{model_chosen} is not a valid selection")
 
@@ -92,6 +97,9 @@ class Oracle:
             self.fg3a_predictor = None
         elif model == "XGBOOST":
             self.points_predictor = None
+        elif model == "TRANSFORMER":
+            self._transformer = None
+            self._enriched_logs = None
         else:
             raise NotImplementedError(f"{self.points_predictor} is not implemented - select a different model!")
         logger.info("Oracle setup complete (model=%s, save_output=%s)", model, self.save_output)
@@ -396,13 +404,149 @@ class Oracle:
         with open(f"{output_path}/model_config.json", "w") as json_file:
             json.dump(self.model_config, json_file, indent=2)
 
+    def _load_transformer(self) -> TeamTransformer:
+        """Load the pre-trained TeamTransformer model from disk."""
+        model_path = os.path.join(_TRANSFORMER_MODEL_DIR, "model.keras")
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(
+                f"Pre-trained Transformer model not found at {model_path}. "
+                "Run 'python -m scripts.train_transformer' first."
+            )
+        logger.info("Loading pre-trained TeamTransformer from %s", model_path)
+        return TeamTransformer.load(model_path, self.model_config)
+
+    def _get_team_forecast_transformer(self, team: Team) -> pd.DataFrame:
+        """Run Transformer-based team-total-points forecast for one side."""
+        from data_prep.team_features import (
+            build_enriched_team_logs,
+            build_inference_inputs,
+            compute_roster_aggregates,
+        )
+        from data_prep.locker_room import collected_seasons
+        from pathlib import Path
+
+        if self._transformer is None:
+            self._transformer = self._load_transformer()
+
+        if self._enriched_logs is None:
+            all_logs = self.locker_room.all_logs
+            self._enriched_logs = build_enriched_team_logs(
+                collected_seasons, all_logs_df=all_logs, cache_dir=Path("artifacts/cache")
+            )
+
+        game_plan = self.locker_room.home_game_plan if team == Team.HOME else self.locker_room.away_game_plan
+        opp_plan = self.locker_room.away_game_plan if team == Team.HOME else self.locker_room.home_game_plan
+        is_home = team == Team.HOME
+
+        # Get team abbreviation
+        from data_prep.gamelogs import nba_teams_info
+        team_row = nba_teams_info[nba_teams_info["nickname"] == game_plan.team_name]
+        team_abbr = team_row["abbreviation"].values[0] if not team_row.empty else game_plan.team_name[:3].upper()
+
+        # Opponent defensive context
+        opp_defense = self.locker_room.get_opponent_defensive_stats(team)
+        opp_def_rating = float(opp_defense.get("E_DEF_RATING", 110.0))
+        opp_pace = float(opp_defense.get("E_PACE", 100.0))
+
+        # Opponent rolling stats (PPG allowed, FG% allowed, FG3% allowed)
+        opp_row = nba_teams_info[nba_teams_info["nickname"] == opp_plan.team_name]
+        opp_abbr = opp_row["abbreviation"].values[0] if not opp_row.empty else opp_plan.team_name[:3].upper()
+        opp_games = self._enriched_logs[
+            (self._enriched_logs["TEAM_ABBREVIATION"] == opp_abbr)
+            & (self._enriched_logs["GAME_DATE"] < pd.Timestamp(self.game_date))
+        ].sort_values("GAME_DATE").tail(10)
+
+        opp_ppg_allowed = float(opp_games["PTS"].mean()) if not opp_games.empty else 110.0
+        opp_fg_pct_allowed = float(opp_games["FG_PCT"].mean()) if not opp_games.empty else 0.46
+        opp_fg3_pct_allowed = float(opp_games["FG3_PCT"].mean()) if not opp_games.empty else 0.36
+
+        # Roster aggregates from active players
+        player_logs = {}
+        if game_plan.active_players is not None:
+            for player_name, row in game_plan.active_players.iterrows():
+                pid = int(row["PLAYER_ID"]) if "PLAYER_ID" in row.index else int(row.name) if isinstance(row.name, (int, float)) else 0
+                if pid == 0:
+                    continue
+                try:
+                    logs_frames = []
+                    for season in collected_seasons:
+                        try:
+                            sl = self.locker_room.fetch_players_game_logs_df(pid, season)
+                            if sl is not None and not sl.empty:
+                                logs_frames.append(sl)
+                        except Exception:
+                            pass
+                    if logs_frames:
+                        player_logs[pid] = pd.concat(logs_frames, ignore_index=True)
+                except Exception:
+                    logger.warning("Could not fetch logs for player %s (id=%s)", player_name, pid)
+
+        active_ids = list(player_logs.keys())
+        roster_aggs = compute_roster_aggregates(player_logs, active_ids, self.game_date)
+
+        seq_len = int(self.model_config.get("seq_len", 10))
+        X_seq, X_static = build_inference_inputs(
+            enriched_logs=self._enriched_logs,
+            team_abbr=team_abbr,
+            game_date=self.game_date,
+            is_home=is_home,
+            opp_def_rating=opp_def_rating,
+            opp_pace=opp_pace,
+            opp_ppg_allowed=opp_ppg_allowed,
+            opp_fg_pct_allowed=opp_fg_pct_allowed,
+            opp_fg3_pct_allowed=opp_fg3_pct_allowed,
+            roster_aggs=roster_aggs,
+            seq_len=seq_len,
+        )
+
+        forecasted_pts = self._transformer.get_forecast(X_seq, X_static)
+
+        # Get actual points if holdout
+        actual_pts = 0
+        if self.holdout:
+            try:
+                game_date_ts = pd.Timestamp(self.game_date)
+                game_row = self._enriched_logs[
+                    (self._enriched_logs["TEAM_ABBREVIATION"] == team_abbr)
+                    & (self._enriched_logs["GAME_DATE"] == game_date_ts)
+                ]
+                if not game_row.empty:
+                    actual_pts = int(game_row["PTS"].iloc[0])
+            except Exception:
+                pass
+
+        if self.progress_callback:
+            self.progress_callback({"type": "step", "message": f"{game_plan.team_name} forecast complete"})
+
+        forecast_df = pd.DataFrame({
+            "PLAYER_NAME": [f"{game_plan.team_name} (Transformer)", "Total"],
+            "FORECASTED_POINTS": [forecasted_pts, forecasted_pts],
+            "ACTUAL_POINTS": [actual_pts, actual_pts],
+        })
+        logger.info(
+            "Transformer forecast: team=%s, predicted=%d, actual=%d",
+            game_plan.team_name, forecasted_pts, actual_pts,
+        )
+        return forecast_df
+
     def run(self):
         """
         Run Oracle
         """
         logger.info("Running Oracle forecast pipeline")
-        home_team_forecast_df = self.get_team_forecast(Team.HOME)
-        away_team_forecast_df = self.get_team_forecast(Team.AWAY)
+
+        if self.oracle_config["model"].upper() == "TRANSFORMER":
+            if self.progress_callback:
+                self.progress_callback({"type": "step", "message": "Loading Transformer model", "progress": 10})
+            home_team_forecast_df = self._get_team_forecast_transformer(Team.HOME)
+            if self.progress_callback:
+                self.progress_callback({"type": "step", "message": "Home team forecast complete", "progress": 55})
+            away_team_forecast_df = self._get_team_forecast_transformer(Team.AWAY)
+            if self.progress_callback:
+                self.progress_callback({"type": "step", "message": "Away team forecast complete", "progress": 95})
+        else:
+            home_team_forecast_df = self.get_team_forecast(Team.HOME)
+            away_team_forecast_df = self.get_team_forecast(Team.AWAY)
 
         logger.info(
             "Team forecasts completed (home_total=%s, away_total=%s)",

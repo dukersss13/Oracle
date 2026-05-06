@@ -266,6 +266,14 @@ small {
   margin-top: 0;
 }
 
+.injury-tag {
+  color: var(--danger);
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .error-text {
   color: var(--danger);
   margin: 12px 0 0;
@@ -338,6 +346,58 @@ small {
 
 .table tr:hover td {
   background: rgba(217, 106, 47, 0.08);
+}
+
+.scoreboard-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.scoreboard-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fff9ef 0%, #fff2dd 100%);
+  padding: 12px;
+  box-shadow: 0 5px 14px rgba(46, 32, 16, 0.08);
+}
+
+.scoreboard-teams {
+  display: grid;
+  gap: 8px;
+}
+
+.score-team-row {
+  display: grid;
+  grid-template-columns: 30px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+
+.score-team-row strong {
+  font-size: 1.25rem;
+  color: var(--ink);
+}
+
+.score-vs {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.team-logo-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(21, 48, 75, 0.12);
+}
+
+.score-subtext {
+  margin: 8px 0 0;
 }
 
 @media (max-width: 720px) {

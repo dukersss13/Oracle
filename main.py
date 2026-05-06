@@ -32,8 +32,75 @@ def run_cli():
     logger.info("CLI run completed in %.2f minutes", (end - start) / 60)
 
 
+def _refresh_training_data() -> None:
+    """Ensure rosters, game logs, and the Transformer model are up to date."""
+    from scripts.preload_training_cache import fetch_latest_rosters_to_current_date
+    from scripts.train_transformer import is_model_stale, train_model
+
+    # 1. Refresh current-season rosters
+    try:
+        logger.info("Refreshing current-season rosters")
+        refresh_summary = fetch_latest_rosters_to_current_date()
+        logger.info(
+            "Roster refresh finished (season=%s, teams=%s, failures=%s)",
+            refresh_summary["season"],
+            refresh_summary["teams_processed"],
+            refresh_summary["failures"],
+        )
+    except Exception:
+        logger.exception("Roster refresh failed; continuing with existing cache")
+
+    # 2. Refresh league game logs (team box scores for Transformer features)
+    try:
+        logger.info("Refreshing league team game logs for Transformer features")
+        from data_prep.team_features import _fetch_league_team_logs
+        from pathlib import Path
+        from data_prep.locker_room import _current_nba_season
+
+        cache_dir = Path("artifacts/cache")
+        season = _current_nba_season()
+        season_tag = season.replace("-", "_")
+        cache_path = cache_dir / f"leaguegamelog_{season_tag}.csv"
+
+        # Only remove cached file if it's older than the configured max age
+        max_cache_hours = int(os.environ.get("ORACLE_CACHE_TTL_HOURS", "12"))
+        if cache_path.exists():
+            import datetime as _dt
+            age_hours = (time.time() - cache_path.stat().st_mtime) / 3600
+            if age_hours > max_cache_hours:
+                logger.info("League game log cache is %.1fh old (> %dh); refreshing", age_hours, max_cache_hours)
+                cache_path.unlink()
+            else:
+                logger.info("League game log cache is fresh (%.1fh old); skipping refresh", age_hours)
+
+        _fetch_league_team_logs(season, cache_dir)
+        logger.info("League team game logs refreshed for %s", season)
+    except Exception:
+        logger.exception("League game log refresh failed; continuing with existing cache")
+
+    # 3. Train Transformer if model is missing or stale (>24h)
+    max_age = int(os.environ.get("ORACLE_MODEL_MAX_AGE_HOURS", "24"))
+    if is_model_stale(max_age_hours=max_age):
+        try:
+            logger.info("Transformer model is stale or missing; training now")
+            metrics = train_model(verbose=False)
+            logger.info(
+                "Transformer training complete (RMSE=%.2f, MAE=%.2f, samples=%d)",
+                metrics["test_rmse"],
+                metrics["test_mae"],
+                metrics["train_samples"],
+            )
+        except Exception:
+            logger.exception("Transformer training failed; model may not be available")
+    else:
+        logger.info("Transformer model is up to date; skipping training")
+
+
 def run_server():
     import uvicorn
+    from scripts.preload_training_cache import fetch_latest_rosters_to_current_date
+
+    _refresh_training_data()
 
     browser_port = 8000
     if not _ui_dist_exists() and _start_ui_dev_server():

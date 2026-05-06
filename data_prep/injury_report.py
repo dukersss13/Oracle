@@ -69,6 +69,32 @@ def get_injury_status(injury_report: pd.DataFrame) -> pd.DataFrame:
 
     return injury_report
 
+
+def fetch_current_injuries() -> list[dict]:
+    """Fetch a fresh injury report and return a list of dicts.
+
+    Each dict has keys: name, team, date, description, out.
+    Only players marked 'Out' are included.
+    """
+    raw = _fetch_injury_report_dict()
+    df = pd.DataFrame(raw)
+    if df.empty:
+        return []
+    if "date" in df.columns:
+        df["date"] = df["date"].apply(adjust_datetime_format)
+    df["out"] = df["injury_description"].str.contains("Out", case=False, na=False)
+    out_df = df[df["out"]].copy()
+    return [
+        {
+            "name": row["name"],
+            "team": row["team"],
+            "date": row["date"],
+            "description": row["injury_description"],
+        }
+        for _, row in out_df.iterrows()
+    ]
+
+
 injury_report = _fetch_injury_report_dict()
 injury_report = pd.DataFrame(injury_report)
 if not injury_report.empty and "date" in injury_report.columns:

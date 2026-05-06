@@ -1,21 +1,36 @@
 import { useEffect, useState } from "react";
 
 export default function ForecastProgress({ forecastId, totalPlayers, onDone, onError }) {
-  const [events, setEvents] = useState([]);
-
-  const completedPlayers = new Set(
-    events
-      .filter((e) => e.type === "player_complete" && e.player)
-      .map((e) => e.player)
-  ).size;
-  const progressPct = totalPlayers > 0 ? Math.min(100, Math.round((completedPlayers / totalPlayers) * 100)) : 0;
+  const [progressPct, setProgressPct] = useState(0);
+  const [completedPlayers, setCompletedPlayers] = useState(0);
 
   useEffect(() => {
     const stream = new EventSource(`/api/forecast/${forecastId}/stream`);
     stream.onmessage = (event) => {
       const msg = JSON.parse(event.data);
-      setEvents((prev) => [...prev, msg]);
+      if (msg.type === "step") {
+        if (msg.progress != null) {
+          setProgressPct((prev) => Math.max(prev, msg.progress));
+          if (totalPlayers > 0) {
+            const done = Math.min(totalPlayers, Math.floor((Number(msg.progress) / 100) * totalPlayers));
+            setCompletedPlayers((prev) => Math.max(prev, done));
+          }
+        }
+      }
+      if (msg.type === "player_complete") {
+        setCompletedPlayers((prev) => {
+          const next = prev + 1;
+          if (totalPlayers > 0) {
+            setProgressPct(Math.min(100, Math.round((next / totalPlayers) * 100)));
+          }
+          return next;
+        });
+      }
       if (msg.type === "completed") {
+        setProgressPct(100);
+        if (totalPlayers > 0) {
+          setCompletedPlayers(totalPlayers);
+        }
         stream.close();
         onDone(forecastId);
       }
@@ -40,19 +55,17 @@ export default function ForecastProgress({ forecastId, totalPlayers, onDone, onE
       <h3>Running Forecast</h3>
       <div className="progress-wrap">
         <div className="progress-meta">
-          <span>Players completed: {completedPlayers}/{totalPlayers || "?"}</span>
+          <span>
+            {totalPlayers > 0
+              ? `Players completed: ${Math.min(completedPlayers, totalPlayers)}/${totalPlayers}`
+              : "Running forecast"}
+          </span>
           <span>{progressPct}%</span>
         </div>
         <div className="progress-track">
           <div className="progress-fill" style={{ width: `${progressPct}%` }} />
         </div>
       </div>
-      {events.length === 0 && <p className="muted">Starting model run...</p>}
-      {events.map((e, i) => (
-        <p className="event-item" key={`${e.type}-${i}`}>
-          {e.type === "player_complete" ? `Completed: ${e.player}` : e.type}
-        </p>
-      ))}
     </div>
   );
 }
