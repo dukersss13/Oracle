@@ -23,15 +23,23 @@ pd.set_option('mode.chained_assignment', None)
 pd.set_option('display.max_columns', None)
 
 
-current_season = ["2024-25", "2023-24", "2022-23"]
-collected_seasons = ["2024-25", "2023-24", "2022-23"]
-
-
 def _current_nba_season(current_dt: datetime | None = None) -> str:
     if current_dt is None:
         current_dt = datetime.now()
     season_start_year = current_dt.year if current_dt.month >= 10 else current_dt.year - 1
     return f"{season_start_year}-{(season_start_year + 1) % 100:02d}"
+
+
+def _recent_nba_seasons(n: int = 3, current_dt: datetime | None = None) -> list[str]:
+    if current_dt is None:
+        current_dt = datetime.now()
+    current = _current_nba_season(current_dt)
+    start_year = int(current.split("-")[0])
+    return [f"{y}-{(y + 1) % 100:02d}" for y in range(start_year, start_year - n, -1)]
+
+
+collected_seasons = _recent_nba_seasons(3)
+current_season = [collected_seasons[0]]
 
 class Team(Enum):
     HOME = 0

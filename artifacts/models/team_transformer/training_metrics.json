@@ -1,0 +1,26 @@
+{
+  "config": {
+    "seq_len": 10,
+    "seq_features": 15,
+    "static_features": 12,
+    "d_model": 64,
+    "num_heads": 4,
+    "num_layers": 2,
+    "ff_dim": 128,
+    "dropout": 0.15,
+    "epochs": 500,
+    "patience": 50,
+    "learning_rate": 0.001,
+    "scaling_method": "standard"
+  },
+  "train_samples": 5634,
+  "test_samples": 1436,
+  "test_rmse": 11.992415892572676,
+  "test_mae": 9.49190902709961,
+  "seasons": [
+    "2024-25",
+    "2023-24",
+    "2022-23"
+  ],
+  "best_epoch": 63
+}
