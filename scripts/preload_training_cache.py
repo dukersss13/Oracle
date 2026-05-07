@@ -8,7 +8,7 @@ from nba_api.stats.endpoints import commonteamroster, playergamelog
 from data_prep.db import OracleCacheDB
 from data_prep.gamelogs import consolidate_all_game_logs, nba_teams_info, update_data
 
-SEASONS = ["2024-25", "2023-24", "2022-23"]
+SEASONS = ["2024-25", "2023-24"]
 
 
 def get_current_nba_season(current_dt: datetime | None = None) -> str:

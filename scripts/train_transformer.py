@@ -4,7 +4,7 @@ Offline training script for the TeamTransformer model.
 Usage:
     python -m scripts.train_transformer [--epochs 500] [--seq-len 10] [--verbose]
 
-Builds the training dataset from 3 seasons of NBA data, trains the
+Builds the training dataset from 2 seasons of NBA data, trains the
 Transformer, evaluates on a temporal holdout, and saves the model
 to artifacts/models/team_transformer/.
 """
@@ -26,7 +26,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-SEASONS = ["2024-25", "2023-24", "2022-23"]
+SEASONS = ["2024-25", "2023-24"]
 MODEL_DIR = Path("artifacts/models/team_transformer")
 CACHE_DIR = Path("artifacts/cache")
 

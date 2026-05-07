@@ -30,7 +30,7 @@ def _current_nba_season(current_dt: datetime | None = None) -> str:
     return f"{season_start_year}-{(season_start_year + 1) % 100:02d}"
 
 
-def _recent_nba_seasons(n: int = 3, current_dt: datetime | None = None) -> list[str]:
+def _recent_nba_seasons(n: int = 2, current_dt: datetime | None = None) -> list[str]:
     if current_dt is None:
         current_dt = datetime.now()
     current = _current_nba_season(current_dt)
